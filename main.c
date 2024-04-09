@@ -22,9 +22,16 @@ WINDOW *enemyfleet;
 WINDOW *mainwin;
 
 bool CONNECTED = false;
+bool READY = false;
 int CLIENT, SERVER;
 
+char *ADDRESS;
+int PORT;
+
 bool turn = true;
+char *player_map;
+char *enemy_map;
+int mx, my;
 
 void init_curses(){
 	setlocale(LC_ALL, "");
@@ -140,7 +147,7 @@ char *position_fleet(){
 	keypad(playerfield, true);
 
 	int rem_ships = 4;
-	char *player_map = calloc(100, sizeof(char));
+	char *map = calloc(100, sizeof(char));
 	int x = 0;
 	int y = 0;
 	bool rot = true;
@@ -156,9 +163,10 @@ char *position_fleet(){
 			if (x > 9) x = 9;
 			if (y+ship[rem_ships] > 9) y = 9-ship[rem_ships];
 		}
+
 		werase(playerfield);
 		print_field(playerfield, 2, 4, " Your Battlefield ");
-		draw_map(playerfield, player_map, true);		
+		draw_map(playerfield, map, true);		
 		
 		wattron(playerfield, A_BLINK);
 		if(rot){
@@ -190,25 +198,25 @@ char *position_fleet(){
 		if (key == 10) {
 			bool placed = true;
 			if (rot){
-				for(int i = 0; i < ship[rem_ships]+1; i++) if (player_map[cds(y,x+i)] != 0) placed = false;
+				for(int i = 0; i < ship[rem_ships]+1; i++) if (map[cds(y,x+i)] != 0) placed = false;
 			        if (placed){	
-					player_map[cds(y,x)] = 1;
-					for (int i = 1; i < ship[rem_ships]; i++) player_map[cds(y,x+i)] = 2;
-					player_map[cds(y,x+ship[rem_ships])] = 3;
+					map[cds(y,x)] = 1;
+					for (int i = 1; i < ship[rem_ships]; i++) map[cds(y,x+i)] = 2;
+					map[cds(y,x+ship[rem_ships])] = 3;
 				}
 			}
 			else{
-				for(int i = 0; i < ship[rem_ships]+1; i++) if (player_map[cds(y+i,x)] != 0) placed = false;
+				for(int i = 0; i < ship[rem_ships]+1; i++) if (map[cds(y+i,x)] != 0) placed = false;
 			        if (placed){
-					player_map[cds(y,x)] = 4;
-					for (int i = 1; i < ship[rem_ships]; i++) player_map[cds(y+i,x)] = 5;
-					player_map[cds(y+ship[rem_ships], x)] = 6;
+					map[cds(y,x)] = 4;
+					for (int i = 1; i < ship[rem_ships]; i++) map[cds(y+i,x)] = 5;
+					map[cds(y+ship[rem_ships], x)] = 6;
 				}
 			}
 			if (placed) rem_ships--;
 		}
 		if (key == 27){
-			*player_map = 10;
+			*map = 10;
 			break;
 		}
 	} while(rem_ships >= 0);
@@ -216,16 +224,16 @@ char *position_fleet(){
 	keypad(playerfield, false);
 	werase(playerfield);
 	print_field(playerfield, 2, 4, " Your Battlefield ");
-	draw_map(playerfield, player_map, true);
+	draw_map(playerfield, map, true);
 	wrefresh(playerfield);
 
-	return player_map;
+	return map;
 
 }
 
 char *setup_enemy(){
 
-	char *enemy_map = calloc(100, sizeof(char));
+	char *map = calloc(100, sizeof(char));
 
 	int rem_ships = 4;
 	int ship[5] = {1, 2, 2, 3, 4};
@@ -250,34 +258,40 @@ char *setup_enemy(){
 			}
 			for(int i = 0; i < ship[rem_ships]+1; i++){
 				if (rot){
-					if (y > 10 || x+i > 10 || enemy_map[cds(y,x+i)] != 0) placed = false;
+					if (y > 10 || x+i > 10 || map[cds(y,x+i)] != 0) placed = false;
 				} else {
-					if (y+i > 10 || x > 10 || enemy_map[cds(y+i,x)] != 0) placed = false;
+					if (y+i > 10 || x > 10 || map[cds(y+i,x)] != 0) placed = false;
 				}
 			}
 		} while (!placed);
 		if (rot){
-			enemy_map[cds(y,x)] = 1;
-			for (int i = 1; i < ship[rem_ships]; i++) enemy_map[cds(y,x+i)] = 2;
-			enemy_map[cds(y,x+ship[rem_ships])] = 3;
+			map[cds(y,x)] = 1;
+			for (int i = 1; i < ship[rem_ships]; i++) map[cds(y,x+i)] = 2;
+			map[cds(y,x+ship[rem_ships])] = 3;
 		}else{
-			enemy_map[cds(y,x)] = 4;
-			for (int i = 1; i < ship[rem_ships]; i++) enemy_map[cds(y+i,x)] = 5;
-			enemy_map[cds(y+ship[rem_ships],x)] = 6;
+			map[cds(y,x)] = 4;
+			for (int i = 1; i < ship[rem_ships]; i++) map[cds(y+i,x)] = 5;
+			map[cds(y+ship[rem_ships],x)] = 6;
 		}
 		rem_ships --;
 
 	} while (rem_ships >= 0);
 	
-	return enemy_map;
+	return map;
 }
 
 void game_loop(bool mode){
 
-	char *player_map = position_fleet();
+	player_map = position_fleet();
+
 	if(*player_map != 10){
 
-		char *enemy_map = setup_enemy();
+		if (mode) {
+			write(CLIENT,"READY", 6);
+			while(!READY) sleep(1);
+			enemy_map = calloc(100, sizeof(char));
+		}
+		else enemy_map = setup_enemy();
 
 		int x = 0;
 		int y = 0;
@@ -293,7 +307,7 @@ void game_loop(bool mode){
 				if(y < 0) y = 0;
 	
 				werase(enemyfield);
-				print_field(enemyfield, 2, COLS-49, " Enemy Battlefield ");
+				print_field(enemyfield, 2, 93, " Enemy BattleField ");
 				draw_map(enemyfield, enemy_map, false);
 		
 				wattron(enemyfield, A_BLINK);
@@ -307,9 +321,11 @@ void game_loop(bool mode){
 				if (key == KEY_RIGHT) x++;
 				if (key == 10){
 					if (mode){
-						char msg[] = {'F', '0'+y, '0'+x, '\0'};
-
+						char msg[4] = {'F', '0'+y, '0'+x, '\0'};
+						mx = x;
+						my = y;
 						int n = write(CLIENT,(char*)msg, 4);
+
 					} else {
 						if(enemy_map[cds(y,x)] != 0 && enemy_map[cds(y,x)] != 8){
 							enemy_map[cds(y,x)] = 7;
@@ -322,21 +338,25 @@ void game_loop(bool mode){
 				}
 				wrefresh(enemyfield);
 			} else {
-				int ex, ey;
-				
-				ex = rand() % 10;
-				ey = rand() % 10;
+				if (mode){
+					while(!turn) sleep(1);
+				}else {
+					int ex, ey;
 					
-				if(player_map[cds(ey,ex)] != 0 && player_map[cds(ey,ex)] != 8){
-					player_map[cds(ey,ex)] = 7;
-				} else {
-					player_map[cds(ey,ex)] = 8;
+					ex = rand() % 10;
+					ey = rand() % 10;
+						
+					if(player_map[cds(ey,ex)] != 0 && player_map[cds(ey,ex)] != 8){
+						player_map[cds(ey,ex)] = 7;
+					} else {
+						player_map[cds(ey,ex)] = 8;
+					}
+					turn = true;
+					werase(playerfield);
+					print_field(playerfield, 2, 4, " Your Battlefield ");
+					draw_map(playerfield, player_map, true);
+					wrefresh(playerfield);	
 				}
-				turn = true;
-				werase(playerfield);
-				print_field(playerfield, 2, 4, " Your Battlefield ");
-				draw_map(playerfield, player_map, true);
-				wrefresh(playerfield);	
 			}
 	
 		}while(key != 27);
@@ -355,9 +375,8 @@ void create_gamewin(){
 				refresh();
 	box(gamewin, 0, 0);
 	mvwprintw(gamewin, 30, 138-72, " Move:[UP,DOWN,LEFT,RIGHT] Place Ship/Fire:[ENTER] Rotate Ship:[SPACE] ");
-	wrefresh(gamewin);
-
 	setup_fields();
+	wrefresh(gamewin);
 }
 
 void close_gamewin(){
@@ -388,6 +407,77 @@ void error(const char *msg){
 	wrefresh(errwin);
 }
 
+void getparse_msg(){
+
+	int n;
+	char *buffer; 
+	
+	while(CONNECTED){
+		buffer = calloc(256, sizeof(char));
+	
+		n = read(CLIENT,buffer,255);
+		if (n < 0) {
+			error("ERROR reading from socket");
+			pthread_exit((void *)-1);
+		}
+	
+		wprintw(radiolog, "%s ", buffer);
+		wrefresh(radiolog);
+
+		if (strcmp(buffer, "READY") == 0){
+			READY = true;
+		}
+		if (strcmp(buffer, "HIT") == 0){
+			enemy_map[cds(my, mx)] = 7;
+			werase(enemyfield);
+			print_field(enemyfield, 2, 93, " Enemy BattleField ");
+			draw_map(enemyfield, enemy_map, false);
+			wrefresh(enemyfield);
+
+		}
+		if (strcmp(buffer, "MISS") == 0){
+			enemy_map[cds(my, mx)] = 8;
+			werase(enemyfield);
+			print_field(enemyfield, 2, 93, " Enemy BattleField ");
+			draw_map(enemyfield, enemy_map, false);
+			wrefresh(enemyfield);
+
+		}
+		if (buffer[0] == 'F'){
+			turn = true;
+			int y = buffer[1]-'0';
+			int x = buffer[2]-'0';
+			if (player_map[cds(y,x)] != 0 && player_map[cds(y,x)] != 8){
+				player_map[cds(y,x)] = 7;
+				n = write(CLIENT, "HIT", 3);
+				if (n < 0){
+					error("ERROR writing to socket");
+					pthread_exit((void *)-1);
+				}
+			} else {
+				player_map[cds(y,x)] = 8;
+				n = write(CLIENT, "MISS", 4);
+				if (n < 0){
+					error("ERROR writing to socket");
+					pthread_exit((void *)-1);
+				}
+			}
+			werase(playerfield);
+			print_field(playerfield, 2, 4, " Your Battlefield ");
+			draw_map(playerfield, player_map, true);
+			wrefresh(playerfield);
+		}
+		if (strcmp(buffer, "ACK") != 0){	
+			n = write(CLIENT,"ACK",3);
+			if (n < 0){
+				error("ERROR writing to socket");
+				pthread_exit((void *)-1);
+			}
+		}
+	}
+
+}
+
 void *init_host(void *port){
 
 	int client;
@@ -403,7 +493,7 @@ void *init_host(void *port){
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
-	serv_addr.sin_port = htons(*(int *)port);
+	serv_addr.sin_port = htons(PORT);
 
 	if (bind(SERVER, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
 		error("ERROR on binding");
@@ -423,22 +513,7 @@ void *init_host(void *port){
 	CLIENT = client;
 	CONNECTED = true;
 
-	int n;
-	char *buffer = calloc(256, sizeof(char));
-
-	n = read(CLIENT,buffer,255);
-	if (n < 0) {
-		error("ERROR reading from socket");
-		pthread_exit((void *)-1);
-	}
-
-	wprintw(radiolog, "%s", buffer);
-
-	n = write(CLIENT,"ACK",3);
-	if (n < 0){
-		error("ERROR writing to socket");
-		pthread_exit((void *)-1);
-	}
+	getparse_msg();
 
 	close(SERVER);
 	close(CLIENT);
@@ -446,41 +521,46 @@ void *init_host(void *port){
 	pthread_exit((void *)1);
 }
 
-int init_client(char *address, int port){
+void *init_client(){
 
-	int sockfd;
+	int client;
 	struct sockaddr_in serv_addr;
 	struct hostent *server;
 	
-	sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	server = gethostbyname(address);
+	client = socket(AF_INET, SOCK_STREAM, 0);
+	server = gethostbyname(ADDRESS);
 
 	if (server == NULL) {
 		error("ERROR, no such host\n");
-		return-1;
+		pthread_exit((void *)1);
 	}
 	
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
 	bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
-	serv_addr.sin_port = htons(port);
+	serv_addr.sin_port = htons(PORT);
 	
-	if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) {
+	if (connect(client,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) {
 		error("ERROR connecting");
-		return-1;
+		pthread_exit((void *)1);
 	}
+	
+	CLIENT = client;
+	CONNECTED = true;
 
-	return sockfd;
+	getparse_msg();
+
+	pthread_exit((void *)1);
 } 
 
-void multiplayer_host(int port){
+void multiplayer_host(){
 	
 	pthread_t tid;
-	pthread_create(&tid, NULL, init_host, (void*)&port);
+	pthread_create(&tid, NULL, init_host, NULL);
 
 	werase(mainwin);
 	create_gamewin();
-	wmove(radiolog, 0, 0);
+	wmove(radiolog, 1, 3);
 	wprintw(radiolog, "Waiting for player... ");
 	wrefresh(radiolog);
 
@@ -497,31 +577,29 @@ void multiplayer_host(int port){
 	
 }
 
-void multiplayer_client(char *address, int port){
-
-	int sock = init_client(address, port);
-	if (sock == -1) return;
-
-	int n;	
-	char *buffer = calloc(255, sizeof(char));
-	char *msg = "Ready";
+void multiplayer_client(){
 	
-	n = write(sock, msg, strlen(msg));
-	if (n < 0) {
-		error("ERROR writing to socket");
-		return;
+	pthread_t tid;
+	pthread_create(&tid, NULL, init_client, NULL);
+
+	werase(mainwin);
+	create_gamewin();
+	wmove(radiolog, 1, 3);
+	wprintw(radiolog, "Connecting to host... ");
+	wrefresh(radiolog);
+
+	while(CONNECTED == false){
+		sleep(1);
 	}
 	
-	n = read(sock,buffer,255);
-	if (n < 0){ 
-		error("ERROR reading from socket");
-		return;
-	}
+	wprintw(radiolog, "Connected to host. ");
+	wrefresh(radiolog);
 	
-	mvwprintw(mainwin, 0, 0, "%s",buffer);
-	wrefresh(mainwin);
-	wgetch(mainwin);
-	close(sock);
+	turn = false;	
+	game_loop(true);
+
+	close_gamewin();
+
 }
 
 void main_menu(){
@@ -599,8 +677,8 @@ void main_menu(){
 						}
 					} while (key != 10);	
 					curs_set(0);
-					int port = atoi(p);	
-					multiplayer_host(port);
+					PORT= atoi(p);	
+					multiplayer_host();
 					werase(mainwin);
 				}
 				break;
@@ -660,9 +738,9 @@ void main_menu(){
 						}
 					} while (key != 10);	
 					curs_set(0);
-					int port = atoi(p);
-					
-					multiplayer_client(a, port);
+					ADDRESS = a;
+					PORT = atoi(p);
+					multiplayer_client(a, p);
 					werase(mainwin);
 				}
 				break;
