@@ -360,12 +360,15 @@ void game_loop(bool mode){
 			}
 	
 		}while(key != 27);
-	
+		
 		keypad(enemyfield, false);
 	
 		free(enemy_map);
 	}
-
+	if(mode){
+		write(CLIENT, "DISC", 4);
+		CONNECTED = false;
+	}
 	free(player_map);
 
 }
@@ -474,8 +477,10 @@ void getparse_msg(){
 				pthread_exit((void *)-1);
 			}
 		}
+		if (strcmp(buffer, "DISC") == 0){
+			CONNECTED = false;
+		}
 	}
-
 }
 
 void *init_host(void *port){
@@ -550,6 +555,8 @@ void *init_client(){
 
 	getparse_msg();
 
+	close(CLIENT);
+
 	pthread_exit((void *)1);
 } 
 
@@ -565,6 +572,13 @@ void multiplayer_host(){
 	wrefresh(radiolog);
 
 	while(CONNECTED == false){
+		halfdelay(5);
+		int key = wgetch(enemyfield);
+		if (key == 27){ 
+			halfdelay(0);
+			close_gamewin();
+			return;
+		}
 		sleep(1);
 	}
 	
@@ -589,6 +603,13 @@ void multiplayer_client(){
 	wrefresh(radiolog);
 
 	while(CONNECTED == false){
+		halfdelay(5);
+		int key = wgetch(enemyfield);
+		if (key == 27){ 
+			halfdelay(0);
+			close_gamewin();
+			return;
+		}
 		sleep(1);
 	}
 	
