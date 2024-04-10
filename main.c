@@ -632,7 +632,6 @@ void main_menu(){
 	wrefresh(master);
 	
 	int win_len = 50;
-	//mainwin = malloc(sizeof(WINDOW));
 	mainwin = derwin(master, 10, win_len, LINES/2, COLS/2-win_len/2);
 	refresh();
 	keypad(mainwin, true);
@@ -698,7 +697,7 @@ void main_menu(){
 							PORT= atoi(p);	
 							multiplayer_host();
 							break;
-						} else {
+						} else if (key >= '0' && key <= '9') {
 							wprintw(mainwin, "%c", (char)key);
 							*c = (char)key;
 							c++;
@@ -719,7 +718,7 @@ void main_menu(){
 					mvwprintw(mainwin, 5, 6, "- Port:");
 					wrefresh(mainwin);
 					curs_set(1);
-					char *p = calloc(6, sizeof(char));
+					char *p = calloc(16, sizeof(char));
 					char *c = p;
 					char *a = calloc(6, sizeof(char));
 					char *d = a;
@@ -758,7 +757,7 @@ void main_menu(){
 							PORT = atoi(p);
 							multiplayer_client(a, p);
 							break;
-						} else {
+						} else if (key >= '0' && key <= '9' || key == '.'){
 							wprintw(mainwin, "%c", (char)key);
 							if(field){
 								*c = (char)key;
@@ -796,8 +795,6 @@ int main(int argc, char **argv){
 	
 	main_menu();	
 	
-	fflush(stdin);
-	fflush(stdout);
 	curs_set(1);
 	endwin();
 
