@@ -23,7 +23,6 @@ WINDOW *mainwin;
 
 bool CONNECTED = false;
 bool READY = false;
-bool THREXIT = false;
 int CLIENT, SERVER;
 
 char *ADDRESS;
@@ -47,13 +46,10 @@ void print_title_screen(){
 	
 	int title_len = 48;
 	char title[3][128] ={"▒█▀▀█ █▀▀█ ▀▀█▀▀ ▀▀█▀▀ █░░ █▀▀ █▀▀ █░░█ ░▀░ █▀▀█\n","▒█▀▀▄ █▄▄█ ░░█░░ ░░█░░ █░░ █▀▀ ▀▀█ █▀▀█ ▀█▀ █░░█\n","▒█▄▄█ ▀░░▀ ░░▀░░ ░░▀░░ ▀▀▀ ▀▀▀ ▀▀▀ ▀░░▀ ▀▀▀ █▀▀▀\n"};
-	for (int i = 0; i < 3; i++){
-		mvwprintw(master, 7+i, (COLS/2)-(title_len/2), title[i]);
-	}
+	for (int i = 0; i < 3; i++) mvwprintw(master, 7+i, (COLS/2)-(title_len/2), title[i]);
 	box(master, 0, 0);
 	wattron(master, A_BLINK);
-	int msg_len = 29;
-	mvwprintw(master, 11, COLS/2-msg_len/2, "Press any button to continue");	
+	mvwprintw(master, 11, COLS/2-29/2, "Press any button to continue");	
 	wattroff(master, A_BLINK);
 	wrefresh(master);
 }
@@ -153,7 +149,7 @@ char *position_fleet(){
 	int y = 0;
 	bool rot = true;
 	int ship[5] = {1, 2, 2, 3, 4};
-	
+	wtimeout(playerfield, 5);
 	do{
 		if (x < 0) x = 0;
 		if (y < 0) y = 0;
@@ -216,11 +212,13 @@ char *position_fleet(){
 			}
 			if (placed) rem_ships--;
 		}
-		if (key == 27){
+		if (key == 27 || CONNECTED == false){
 			*map = 10;
 			break;
 		}
 	} while(rem_ships >= 0);
+	
+	wtimeout(playerfield, -1);
 
 	keypad(playerfield, false);
 	werase(playerfield);
@@ -379,10 +377,11 @@ void game_loop(bool mode){
 }
 
 void create_gamewin(){
-	gamewin = derwin(master, LINES-(LINES/3)-1, 138, LINES/3, (COLS/2)-(138/2)); 
+	werase(mainwin);
+	gamewin = derwin(master, 31, 138, LINES/3, (COLS/2)-(138/2)); 
 	refresh();
 	box(gamewin, 0, 0);
-	mvwprintw(gamewin, 30, 138-72, " Move:[UP,DOWN,LEFT,RIGHT] Place Ship/Fire:[ENTER] Rotate Ship:[SPACE] ");
+	mvwprintw(gamewin, 30, 66, " Move:[UP,DOWN,LEFT,RIGHT] Place Ship/Fire:[ENTER] Rotate Ship:[SPACE] ");
 	setup_fields();
 	wrefresh(gamewin);
 }
@@ -404,17 +403,17 @@ void close_gamewin(){
 }
 
 void error(const char *msg){
-	werase(mainwin);
 	WINDOW *errwin = derwin(master, 10, 40, (LINES/2)-5, (COLS/2)-20);
 	refresh();
 	box(errwin, 0, 0);
 	mvwprintw(errwin, 0, 3, " !ERROR! ");
 	mvwprintw(errwin, 4, 6, "%s", msg);
-	wrefresh(mainwin);
 	wrefresh(errwin);
 	wgetch(errwin);
 	werase(errwin);
 	wrefresh(errwin);
+	delwin(errwin);
+	refresh();
 }
 
 void getparse_msg(){
@@ -422,21 +421,21 @@ void getparse_msg(){
 	int n;
 	char *buffer; 
 	
-	while(CONNECTED){
-		
+	while(CONNECTED){	
+	
+		buffer = calloc(256, sizeof(char));
+
+		n = read(CLIENT,buffer,255);
+		if (CONNECTED){			
+			wprintw(radiolog, "%s ", buffer);
+			wrefresh(radiolog);
+		}
+	
 		if (n < 0) {
 			error("ERROR reading from socket");
 			pthread_exit((void *)-1);
 		}
-	
-		buffer = calloc(256, sizeof(char));
-	
-		n = read(CLIENT,buffer,255);
-		
-		if (CONNECTED){	
-			wprintw(radiolog, "%s ", buffer);
-			wrefresh(radiolog);
-		}
+
 		if (strcmp(buffer, "READY") == 0){
 			READY = true;
 		}
@@ -483,14 +482,17 @@ void getparse_msg(){
 }
 
 void *init_host(void *port){
+	
+	int oldt;	
+	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldt);	
 
-	int client;
 	socklen_t clilen;
 	struct sockaddr_in serv_addr, cli_addr;
 
 	SERVER = socket(AF_INET, SOCK_STREAM, 0);
 	if (SERVER < 0) {
-		error("ERROR opening socket");
+		wprintw(radiolog, "!ERROR! ");
+		//error("ERROR opening socket");
 		pthread_exit((void *)-1);
 	}
 	
@@ -502,19 +504,17 @@ void *init_host(void *port){
 	if (bind(SERVER, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
 		error("ERROR on binding");
 		pthread_exit((void *)-1);
-
 	}
 
 	listen(SERVER,5);
 	clilen = sizeof(cli_addr);
-	client = accept(SERVER, (struct sockaddr *) &cli_addr, &clilen);
+	CLIENT = accept(SERVER, (struct sockaddr *) &cli_addr, &clilen);
 
-	if (client < 0){
+	if (CLIENT < 0){
 	       	error("ERROR on accept");
 		pthread_exit((void *)-1);
 	}
 	
-	CLIENT = client;
 	CONNECTED = true;
 
 	getparse_msg();
@@ -522,22 +522,22 @@ void *init_host(void *port){
 	close(SERVER);
 	close(CLIENT);
 
-	THREXIT = true;
-
 	pthread_exit((void *)1);
 }
 
 void *init_client(){
+	
+	int oldt;	
+	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldt);	
 
-	int client;
 	struct sockaddr_in serv_addr;
 	struct hostent *server;
 	
-	client = socket(AF_INET, SOCK_STREAM, 0);
+	CLIENT = socket(AF_INET, SOCK_STREAM, 0);
 	server = gethostbyname(ADDRESS);
 
 	if (server == NULL) {
-		error("ERROR, no such host\n");
+		error("ERROR, no such host");
 		pthread_exit((void *)1);
 	}
 	
@@ -546,20 +546,17 @@ void *init_client(){
 	bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
 	serv_addr.sin_port = htons(PORT);
 	
-	if (connect(client,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) {
+	if (connect(CLIENT,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) {
 		error("ERROR connecting");
 		pthread_exit((void *)1);
 	}
 	
-	CLIENT = client;
 	CONNECTED = true;
 
 	getparse_msg();
 
 	close(CLIENT);
 	
-	THREXIT = true;
-
 	pthread_exit((void *)1);
 } 
 
@@ -580,6 +577,8 @@ void multiplayer_host(){
 		if (key == 27){ 
 			wtimeout(enemyfield, -1);
 			close_gamewin();
+			close(SERVER);
+			pthread_cancel(tid);
 			return;
 		}
 		sleep(1);
@@ -610,6 +609,8 @@ void multiplayer_client(){
 		if (key == 27){ 
 			wtimeout(enemyfield, -1);
 			close_gamewin();
+			close(CLIENT);
+			pthread_cancel(tid);
 			return;
 		}
 		sleep(1);
@@ -623,6 +624,118 @@ void multiplayer_client(){
 
 	close_gamewin();
 
+}
+
+void print_main_menu(bool mp, int c){
+	
+	werase(mainwin);
+	box(mainwin, 0, 0);	
+	mvwprintw(mainwin, 0, 3, mp ? " Multi Player " : " Main Menu ");
+	mvwprintw(mainwin, 9, 15, " Scroll:[UP, DOWN] Select:[ENTER] ");
+				
+	char *menu[3] = {"- Single Player", "- Multi Player", "- Exit"};
+	char *mpmenu[3] = {"- Host Game", "- Join Game", "- Back"};
+	for(int i = 0; i < 3; i++){
+		if (i == c) wattron(mainwin, A_REVERSE);
+		mvwprintw(mainwin, 2+(2*i), 6, mp ? mpmenu[i] : menu[i]);
+		wattroff(mainwin, A_REVERSE);
+	}	
+		
+	wrefresh(mainwin);
+
+}
+
+void mph_menu(){
+
+	werase(mainwin);
+	box(mainwin, 0, 0);	
+	mvwprintw(mainwin, 0, 3, " Multi Player ");
+	mvwprintw(mainwin, 4, 6, "- Port: ");
+	wrefresh(mainwin);
+	char *p = calloc(6, sizeof(char));
+	char *c = p;
+	int key;
+	do{
+		key = wgetch(mainwin);
+		if (key == 263){
+			int y, x;
+			getyx(mainwin, y, x);
+			if (x > 14){
+				mvwprintw(mainwin, y, x-1, " ");
+				wmove(mainwin, y, x-1);
+				*c = '\0';
+				c--;
+			}
+		} else if (key == 10){
+			curs_set(0);
+			PORT= atoi(p);	
+			multiplayer_host();
+			break;
+		} else if (key >= '0' && key <= '9') {
+			wprintw(mainwin, "%c", (char)key);
+			*c = (char)key;
+			c++;
+		}
+	} while (key != 27);
+}
+
+void mpc_menu(){
+
+	werase(mainwin);
+	box(mainwin, 0, 0);	
+	mvwprintw(mainwin, 0, 3, " Multi Player ");
+	mvwprintw(mainwin, 3, 6, "- Address:");
+	mvwprintw(mainwin, 5, 6, "- Port:");
+	wrefresh(mainwin);
+	char *p = calloc(16, sizeof(char));
+	char *c = p;
+	char *a = calloc(6, sizeof(char));
+	char *d = a;
+	int key;
+	bool field = false;
+	int y, x;
+	getyx(mainwin, y, x);
+	wmove(mainwin, y-2, 17);
+	do{
+		key = wgetch(mainwin);
+		if (key == 263){
+			getyx(mainwin, y, x);
+			if (x > (field ? 14 : 17)){
+				mvwprintw(mainwin, y, x-1, " ");
+				wmove(mainwin, y, x-1);
+				if (field){
+					*c = '\0';
+					c--;
+				} else {
+					*d = '\0';
+					d--;	
+				}
+			}
+		} else if(key == KEY_UP && field){
+			getyx(mainwin, y, x);
+			field = false;
+			wmove(mainwin, y-2, 17+(d-a));
+		} else if(key == KEY_DOWN && !field){
+			getyx(mainwin, y, x);
+			field = true;
+			wmove(mainwin, y+2, 14+(c-p));
+		} else if (key == 10){
+			curs_set(0);
+			ADDRESS = a;
+			PORT = atoi(p);
+			multiplayer_client();
+			break;
+		} else if (key >= '0' && key <= '9' || key == '.'){
+			wprintw(mainwin, "%c", (char)key);
+			if(field){
+				*c = (char)key;
+				c++;
+			} else {
+				*d = (char)key;
+				d++;
+			}
+		}
+	} while (key != 27);	
 }
 
 void main_menu(){
@@ -642,29 +755,16 @@ void main_menu(){
 	bool multiplayer = false;
 	do{
 		do{
-			box(mainwin, 0, 0);	
-			mvwprintw(mainwin, 0, 3, multiplayer ? " Multi Player " : " Main Menu ");
-			mvwprintw(mainwin, 9, 15, " Scroll:[UP, DOWN] Select:[ENTER] ");
-	
 			if(cursor > 2) cursor = 2;
 			if(cursor < 0) cursor = 0;
-	
-			char *menu[3] = {"- Single Player", "- Multi Player", "- Exit"};
-		        char *mpmenu[3] = {"- Host Game", "- Join Game", "- Back"};
-			for(int i = 0; i < 3; i++){
-				if (i == cursor) wattron(mainwin, A_REVERSE);
-				mvwprintw(mainwin, 2+(2*i), 6, multiplayer ? mpmenu[i] : menu[i]);
-				wattroff(mainwin, A_REVERSE);
-			}	
-			
-			wrefresh(mainwin);
-	
+
+			print_main_menu(multiplayer, cursor);	
+
 			key = wgetch(mainwin);
 		
 			if(key == KEY_UP) cursor--;
 			if(key == KEY_DOWN) cursor++;
 				
-			werase(mainwin);
 		} while (key != 10);
 		switch(cursor){
 			case 0:
@@ -673,38 +773,9 @@ void main_menu(){
 					game_loop(false);
 					close_gamewin();
 				} else{
-					box(mainwin, 0, 0);	
-					mvwprintw(mainwin, 0, 3, " Multi Player ");
-					mvwprintw(mainwin, 4, 6, "- Port: ");
-					wrefresh(mainwin);
 					curs_set(1);
-					char *p = calloc(6, sizeof(char));
-					char *c = p;
-					int key;
-					do{
-						key = wgetch(mainwin);
-						if (key == 263){
-							int y, x;
-							getyx(mainwin, y, x);
-							if (x > 14){
-								mvwprintw(mainwin, y, x-1, " ");
-								wmove(mainwin, y, x-1);
-								*c = '\0';
-								c--;
-							}
-						} else if (key == 10){
-							curs_set(0);
-							PORT= atoi(p);	
-							multiplayer_host();
-							break;
-						} else if (key >= '0' && key <= '9') {
-							wprintw(mainwin, "%c", (char)key);
-							*c = (char)key;
-							c++;
-						}
-					} while (key != 27);
+					mph_menu();
 					curs_set(0);
-					werase(mainwin);
 				}
 				break;
 			case 1:
@@ -712,64 +783,10 @@ void main_menu(){
 					cursor = 0;
 					multiplayer = true;
 				} else {
-					box(mainwin, 0, 0);	
-					mvwprintw(mainwin, 0, 3, " Multi Player ");
-					mvwprintw(mainwin, 3, 6, "- Address:");
-					mvwprintw(mainwin, 5, 6, "- Port:");
-					wrefresh(mainwin);
-					curs_set(1);
-					char *p = calloc(16, sizeof(char));
-					char *c = p;
-					char *a = calloc(6, sizeof(char));
-					char *d = a;
-					int key;
-					bool field = false;
-					int y, x;
-					getyx(mainwin, y, x);
-					wmove(mainwin, y-2, 17);
-					do{
 
-						key = wgetch(mainwin);
-						if (key == 263){
-							getyx(mainwin, y, x);
-							if (x > (field ? 14 : 17)){
-								mvwprintw(mainwin, y, x-1, " ");
-								wmove(mainwin, y, x-1);
-								if (field){
-									*c = '\0';
-									c--;
-								} else {
-									*d = '\0';
-									d--;	
-								}
-							}
-						} else if(key == KEY_UP && field){
-							getyx(mainwin, y, x);
-							field = false;
-							wmove(mainwin, y-2, 17+(d-a));
-						} else if(key == KEY_DOWN && !field){
-							getyx(mainwin, y, x);
-							field = true;
-							wmove(mainwin, y+2, 14+(c-p));
-						} else if (key == 10){
-							curs_set(0);
-							ADDRESS = a;
-							PORT = atoi(p);
-							multiplayer_client(a, p);
-							break;
-						} else if (key >= '0' && key <= '9' || key == '.'){
-							wprintw(mainwin, "%c", (char)key);
-							if(field){
-								*c = (char)key;
-								c++;
-							} else {
-								*d = (char)key;
-								d++;
-							}
-						}
-					} while (key != 27);
+					curs_set(1);
+					mpc_menu();
 					curs_set(0);	
-					werase(mainwin);
 				}
 				break;
 			case 2:
