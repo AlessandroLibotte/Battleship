@@ -26,6 +26,7 @@ typedef struct game_win{
 
 bool CONNECTED = false;
 bool READY = false;
+bool ERROR = false;
 int CLIENT, SERVER;
 char *ADDRESS;
 int PORT;
@@ -41,15 +42,17 @@ void init_curses(){
 	refresh();
 }
 
-void print_title_screen(WINDOW *win){
+void print_title_screen(WINDOW *win, bool mode){
 	
 	int title_len = 48;
 	char title[3][128] ={"▒█▀▀█ █▀▀█ ▀▀█▀▀ ▀▀█▀▀ █░░ █▀▀ █▀▀ █░░█ ░▀░ █▀▀█\n","▒█▀▀▄ █▄▄█ ░░█░░ ░░█░░ █░░ █▀▀ ▀▀█ █▀▀█ ▀█▀ █░░█\n","▒█▄▄█ ▀░░▀ ░░▀░░ ░░▀░░ ▀▀▀ ▀▀▀ ▀▀▀ ▀░░▀ ▀▀▀ █▀▀▀\n"};
 	for (int i = 0; i < 3; i++) mvwprintw(win, ((LINES/3)/2)-1+i, (COLS/2)-(title_len/2), title[i]);
 	box(win, 0, 0);
-	wattron(win, A_BLINK);
-	mvwprintw(win, 11, COLS/2-29/2, "Press any button to continue");	
-	wattroff(win, A_BLINK);
+    if (mode) {
+        wattron(win, A_BLINK);
+        mvwprintw(win, ((LINES / 3) / 2) + 3, COLS / 2 - 29 / 2, "Press any button to continue");
+        wattroff(win, A_BLINK);
+    }
 	wrefresh(win);
 }
 
@@ -495,6 +498,7 @@ void *init_host(void *gamewin){
 	SERVER = socket(AF_INET, SOCK_STREAM, 0);
 	if (SERVER < 0) {
 		error("ERROR opening socket");
+        ERROR = true;
 		pthread_exit((void *)-1);
 	}
 	
@@ -505,6 +509,8 @@ void *init_host(void *gamewin){
 
 	if (bind(SERVER, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
 		error("ERROR on binding");
+        ERROR = true;
+        close(SERVER);
 		pthread_exit((void *)-1);
 	}
 
@@ -513,7 +519,8 @@ void *init_host(void *gamewin){
 	CLIENT = accept(SERVER, (struct sockaddr *) &cli_addr, &clilen);
 
 	if (CLIENT < 0){
-	       	error("ERROR on accept");
+        error("ERROR on accept");
+        ERROR = true;
 		pthread_exit((void *)-1);
 	}
 	
@@ -540,6 +547,7 @@ void *init_client(void *gamewin){
 
 	if (server == NULL) {
 		error("ERROR, no such host");
+        ERROR = true;
 		pthread_exit((void *)1);
 	}
 	
@@ -550,6 +558,8 @@ void *init_client(void *gamewin){
 	
 	if (connect(CLIENT,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) {
 		error("ERROR connecting");
+        ERROR = true;
+        close(CLIENT);
 		pthread_exit((void *)1);
 	}
 	
@@ -564,6 +574,7 @@ void *init_client(void *gamewin){
 
 void multiplayer_host(){
 
+    ERROR = false;
     game_win *gamewin = create_gamewin();
 
 	pthread_t tid;
@@ -573,7 +584,7 @@ void multiplayer_host(){
 	wprintw(gamewin->radiolog, "Waiting for player... ");
 	wrefresh(gamewin->radiolog);
 
-	while(CONNECTED == false){
+	while(!CONNECTED && !ERROR){
 		wtimeout(gamewin->enemyfield, 5);
 		int key = wgetch(gamewin->enemyfield);
 		if (key == 27){ 
@@ -585,17 +596,18 @@ void multiplayer_host(){
 		}
 		sleep(1);
 	}
-		
-	wprintw(gamewin->radiolog, "Player connected. ");
-	wrefresh(gamewin->radiolog);
-	
-	game_loop(gamewin, true);
-
+    wtimeout(gamewin->enemyfield, -1);
+    if (!ERROR) {
+        wprintw(gamewin->radiolog, "Player connected. ");
+        wrefresh(gamewin->radiolog);
+        game_loop(gamewin, true);
+    }
 	close_gamewin(gamewin);
 }
 
 void multiplayer_client(){
 
+    ERROR = false;
     game_win *gamewin = create_gamewin();
 
 	pthread_t tid;
@@ -605,7 +617,7 @@ void multiplayer_client(){
 	wprintw(gamewin->radiolog, "Connecting to host... ");
 	wrefresh(gamewin->radiolog);
 
-	while(CONNECTED == false){
+	while(!CONNECTED && !ERROR){
 		wtimeout(gamewin->enemyfield, 5);
 		int key = wgetch(gamewin->enemyfield);
 		if (key == 27){ 
@@ -617,13 +629,14 @@ void multiplayer_client(){
 		}
 		sleep(1);
 	}
-	
-	wprintw(gamewin->radiolog, "Connected to host. ");
-	wrefresh(gamewin->radiolog);
-	
-	turn = false;	
-	game_loop(gamewin, true);
+    wtimeout(gamewin->enemyfield, -1);
+	if (!ERROR) {
+        wprintw(gamewin->radiolog, "Connected to host. ");
+        wrefresh(gamewin->radiolog);
 
+        turn = false;
+        game_loop(gamewin, true);
+    }
 	close_gamewin(gamewin);
 }
 
@@ -742,9 +755,6 @@ void mpc_menu(WINDOW *win){
 
 void main_menu(){
 
-	for(int i = 0; i < 29; i++) mvwprintw(master, 11, (COLS/2 - 29/2)+i, " ");
-	wrefresh(master);
-
 	WINDOW *mainwin = derwin(master, 10, 50, LINES/2, COLS/2-50/2);
 	refresh();
 	keypad(mainwin, true);
@@ -817,9 +827,11 @@ int main(int argc, char **argv){
         return 1;
     }
 
-	print_title_screen(master);
+	print_title_screen(master, true);
 	getch();
-	
+	werase(master);
+    print_title_screen(master, false);
+
 	main_menu();	
 	
 	curs_set(1);
