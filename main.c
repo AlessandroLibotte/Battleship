@@ -498,7 +498,7 @@ void *init_host(void *gamewin){
 	SERVER = socket(AF_INET, SOCK_STREAM, 0);
 	if (SERVER < 0) {
 		error("ERROR opening socket");
-        ERROR = true;
+		ERROR = true;
 		pthread_exit((void *)-1);
 	}
 	
@@ -509,8 +509,8 @@ void *init_host(void *gamewin){
 
 	if (bind(SERVER, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
 		error("ERROR on binding");
-        ERROR = true;
-        close(SERVER);
+		ERROR = true;
+		close(SERVER);
 		pthread_exit((void *)-1);
 	}
 
@@ -519,8 +519,8 @@ void *init_host(void *gamewin){
 	CLIENT = accept(SERVER, (struct sockaddr *) &cli_addr, &clilen);
 
 	if (CLIENT < 0){
-        error("ERROR on accept");
-        ERROR = true;
+		error("ERROR on accept");
+		ERROR = true;
 		pthread_exit((void *)-1);
 	}
 	
@@ -547,7 +547,7 @@ void *init_client(void *gamewin){
 
 	if (server == NULL) {
 		error("ERROR, no such host");
-        ERROR = true;
+		ERROR = true;
 		pthread_exit((void *)1);
 	}
 	
@@ -574,8 +574,8 @@ void *init_client(void *gamewin){
 
 void multiplayer_host(){
 
-    ERROR = false;
-    game_win *gamewin = create_gamewin();
+	ERROR = false;
+	game_win *gamewin = create_gamewin();
 
 	pthread_t tid;
 	pthread_create(&tid, NULL, init_host, (void *)gamewin);
@@ -596,19 +596,19 @@ void multiplayer_host(){
 		}
 		sleep(1);
 	}
-    wtimeout(gamewin->enemyfield, -1);
-    if (!ERROR) {
-        wprintw(gamewin->radiolog, "Player connected. ");
-        wrefresh(gamewin->radiolog);
-        game_loop(gamewin, true);
-    }
+	wtimeout(gamewin->enemyfield, -1);
+	if (!ERROR) {
+		wprintw(gamewin->radiolog, "Player connected. ");
+		wrefresh(gamewin->radiolog);
+		game_loop(gamewin, true);
+	}
 	close_gamewin(gamewin);
 }
 
 void multiplayer_client(){
 
-    ERROR = false;
-    game_win *gamewin = create_gamewin();
+	ERROR = false;
+	game_win *gamewin = create_gamewin();
 
 	pthread_t tid;
 	pthread_create(&tid, NULL, init_client, (void *)gamewin);
@@ -629,14 +629,13 @@ void multiplayer_client(){
 		}
 		sleep(1);
 	}
-    wtimeout(gamewin->enemyfield, -1);
+	wtimeout(gamewin->enemyfield, -1);
 	if (!ERROR) {
-        wprintw(gamewin->radiolog, "Connected to host. ");
-        wrefresh(gamewin->radiolog);
-
-        turn = false;
-        game_loop(gamewin, true);
-    }
+		wprintw(gamewin->radiolog, "Connected to host. ");
+		wrefresh(gamewin->radiolog);
+		turn = false;
+		game_loop(gamewin, true);
+	}
 	close_gamewin(gamewin);
 }
 
@@ -682,7 +681,7 @@ void mph_menu(WINDOW *win){
 		} else if (key == 10){
 			curs_set(0);
 			PORT= atoi(p);
-            werase(win);
+			werase(win);
 			multiplayer_host();
 			break;
 		} else if (key >= '0' && key <= '9') {
@@ -695,12 +694,15 @@ void mph_menu(WINDOW *win){
 
 void mpc_menu(WINDOW *win){
 
+	//In this submenu the user will be able to provide the IP addrress and port to connect to an host
+	//Print the GUI static elements
 	werase(win);
 	box(win, 0, 0);	
 	mvwprintw(win, 0, 3, " Multi Player ");
 	mvwprintw(win, 3, 6, "- Address:");
 	mvwprintw(win, 5, 6, "- Port:");
 	wrefresh(win);
+	//Allocate memory for the address and port strings
 	char *p = calloc(16, sizeof(char));
 	char *c = p;
 	char *a = calloc(6, sizeof(char));
@@ -737,7 +739,7 @@ void mpc_menu(WINDOW *win){
 			curs_set(0);
 			ADDRESS = a;
 			PORT = atoi(p);
-            werase(win);
+			werase(win);
 			multiplayer_client();
 			break;
 		} else if (key >= '0' && key <= '9' || key == '.'){
