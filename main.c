@@ -656,18 +656,34 @@ void multiplayer(bool mode){
 	close_gamewin(gamewin);
 }
 
-void print_main_menu(WINDOW* win, bool mp, int c){
+void print_main_menu(WINDOW* win, int mp, int c){
 	
 	werase(win);
 	box(win, 0, 0);	
-	mvwprintw(win, 0, 3, mp ? " Multi Player " : " Main Menu ");
+	char *title[3] = {" Main Menu ", " Multi Player ", " Join Game "};
+	mvwprintw(win, 0, 3, "%s", title[mp]);
 	mvwprintw(win, 9, 15, " Scroll:[UP, DOWN] Select:[ENTER] ");
     
-	char *menu[3] = {"- Single Player", "- Multi Player", "- Exit"};
-	char *mpmenu[3] = {"- Host Game", "- Join Game", "- Back"};
+	char *mmenu[3] = {"- Single Player", "- Multi Player", "- Exit"};
+	char *mpmenu[3] = {"- Host Game [1v1 Classic]", "- Join Game", "- Back"};
+	char *jmenu[3] = {"- 1v1 Classic", "- Multiuser Skirmish", "- Back"};
+
+	char **menu;
+	switch(mp){
+		case 0:
+			menu = mmenu;
+			break;
+		case 1:
+			menu = mpmenu;
+			break;
+		case 2:
+			menu = jmenu;
+			break;
+	}
+
 	for(int i = 0; i < 3; i++){
 		if (i == c) wattron(win, A_REVERSE);
-		mvwprintw(win, 2+(2*i), 6, mp ? mpmenu[i] : menu[i]);
+		mvwprintw(win, 2+(2*i), 6, menu[i]);
 		wattroff(win, A_REVERSE);
 	}
     
@@ -779,6 +795,15 @@ void mpc_menu(WINDOW *win){
 	} while (key != 27);	
 }
 
+void mpj_menu(WINDOW *win){
+
+	werase(win);
+	box(win, 0, 0);
+	mvwprintw(win, 0, 3, " Join Game ");
+	
+
+}
+
 void main_menu(){
 
 	WINDOW *mainwin = derwin(master, 10, 50, LINES/2, COLS/2-50/2);
@@ -788,13 +813,13 @@ void main_menu(){
 	int cursor = 0;
 	int key;
 	bool quit = false;
-	bool multiplayer = false;
+	int page = 0;
 	do{
 		do{
 			if(cursor > 2) cursor = 2;
 			if(cursor < 0) cursor = 0;
 
-			print_main_menu(mainwin, multiplayer, cursor);
+			print_main_menu(mainwin, page, cursor);
 
 			key = wgetch(mainwin);
 		
@@ -803,38 +828,59 @@ void main_menu(){
 			
 		} while (key != 10);
 		switch(cursor){
-			case 0:	
-				if(!multiplayer){ // Singleplayer entry
-                    			werase(mainwin);
-					game_win *gamewin = create_gamewin();
-					wmove(gamewin->radiolog, 1, 3);
-					wrefresh(gamewin->radiolog);
-					game_loop(gamewin, false);
-					close_gamewin(gamewin);
-				} else{ // Multiplayer host submenu
-					curs_set(1);
-					mph_menu(mainwin);
-					curs_set(0);
-				}
+		case 0:	
+			switch(mp){
+			case 0: // Singleplayer entry
+                   		werase(mainwin);
+				game_win *gamewin = create_gamewin();
+				wmove(gamewin->radiolog, 1, 3);
+				wrefresh(gamewin->radiolog);
+				game_loop(gamewin, false);
+				close_gamewin(gamewin);
 				break;
-			case 1:
-				if(!multiplayer){ // Multiplayer entry
-					cursor = 0;
-					multiplayer = true;
-				} else { // Multiplayer join submenu
-					curs_set(1);
-					mpc_menu(mainwin);
-					curs_set(0);	
-				}
+			case 1: // 1v1 Classic host submenu
+				curs_set(1);
+				mph_menu(mainwin);
+				curs_set(0);
+				break;
+			case 2: // Join 1v1 classic submenu 
+				curs_set(1);
+				mpc_menu(mainwin);
+				curs_set(0);
+				break;
+			}
+		break;
+		case 1:
+			switch(mp){
+			case 0: // Multiplayer entry
+				cursor = 0;
+				page = 1;
+				break;
+			case 1: // Multiplayer join submenu
+				cursor = 0;
+				page = 2;			
+				break;
+			case 2: // Join Multiuser skirmish submenu
+				werase(mainwin);
+				
+				break;
+			}
+		break;
+		case 2:
+			switch(mp){
+			case 0:  // Quit entry
+				quit = true;
+				break;
+			case 1: // Multiplayer emnu back entry
+				cursor = 0;
+				page = 0;
 				break;
 			case 2:
-				if(!multiplayer){ // Quit entry
-				       	quit = true;
-				} else { // Multiplayer emnu back entry
-					cursor = 0;
-					multiplayer = false;
-				}
+				cursor = 0;
+				page = 1;
 				break;
+			}
+		break;
 		}
 	}while(!quit);
 	keypad(mainwin, false);
