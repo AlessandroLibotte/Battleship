@@ -14,14 +14,14 @@
 
 WINDOW *master;
 typedef struct game_win{
-    WINDOW *win;
-    WINDOW *radiolog;
-    WINDOW *playerfield;
-    WINDOW *enemyfield;
-    WINDOW *playerfleet;
-    WINDOW *enemyfleet;
-    char *player_map;
-    char *enemy_map;
+    	WINDOW *win;
+    	WINDOW *radiolog;
+    	WINDOW *playerfield;
+    	WINDOW *enemyfield;
+    	WINDOW *playerfleet;
+    	WINDOW *enemyfleet;
+    	char *player_map;
+    	char *enemy_map;
 }game_win;
 
 bool CONNECTED = false;
@@ -48,11 +48,11 @@ void print_title_screen(WINDOW *win, bool mode){
 	char title[3][128] ={"▒█▀▀█ █▀▀█ ▀▀█▀▀ ▀▀█▀▀ █░░ █▀▀ █▀▀ █░░█ ░▀░ █▀▀█\n","▒█▀▀▄ █▄▄█ ░░█░░ ░░█░░ █░░ █▀▀ ▀▀█ █▀▀█ ▀█▀ █░░█\n","▒█▄▄█ ▀░░▀ ░░▀░░ ░░▀░░ ▀▀▀ ▀▀▀ ▀▀▀ ▀░░▀ ▀▀▀ █▀▀▀\n"};
 	for (int i = 0; i < 3; i++) mvwprintw(win, ((LINES/3)/2)-1+i, (COLS/2)-(title_len/2), title[i]);
 	box(win, 0, 0);
-    if (mode) {
-        wattron(win, A_BLINK);
-        mvwprintw(win, ((LINES / 3) / 2) + 3, COLS / 2 - 29 / 2, "Press any button to continue");
-        wattroff(win, A_BLINK);
-    }
+    	if (mode) {
+        	wattron(win, A_BLINK);
+        	mvwprintw(win, ((LINES / 3) / 2) + 3, COLS / 2 - 29 / 2, "Press any button to continue");
+        	wattroff(win, A_BLINK);
+    	}
 	wrefresh(win);
 }
 
@@ -84,11 +84,11 @@ void print_fleet(WINDOW *win, char *title){
 
 void setup_fields(game_win *gamewin){
 
-    gamewin->playerfield = derwin(gamewin->win, 21, 41, 2, 4);
-    gamewin->enemyfield = derwin(gamewin->win, 21, 41, 2, 93);
-    gamewin->playerfleet = derwin(gamewin->win, 21, 21, 2, 48);
-    gamewin->enemyfleet = derwin(gamewin->win, 21, 21, 2, 69);
-    gamewin->radiolog = derwin(gamewin->win, 7, 130, 23, 4);
+    	gamewin->playerfield = derwin(gamewin->win, 21, 41, 2, 4);
+    	gamewin->enemyfield = derwin(gamewin->win, 21, 41, 2, 93);
+    	gamewin->playerfleet = derwin(gamewin->win, 21, 21, 2, 48);
+    	gamewin->enemyfleet = derwin(gamewin->win, 21, 21, 2, 69);
+    	gamewin->radiolog = derwin(gamewin->win, 7, 130, 23, 4);
 	refresh();
 
 	print_field(gamewin->playerfield, gamewin->win, 2, 4, " Your Battlefield ");
@@ -214,7 +214,7 @@ void position_fleet(game_win *gamewin, bool mp){
 			}
 			if (placed) rem_ships--;
 		}
-		if (key == 27 || !CONNECTED && mp){
+		if (key == 27 || (!CONNECTED && mp)){
 			*gamewin->player_map = 10;
 			break;
 		}
@@ -281,14 +281,14 @@ char *setup_enemy(){
 
 void game_loop(game_win *gamewin, bool mp){
 
-    position_fleet(gamewin, mp);
+    	position_fleet(gamewin, mp);
 
 	if(*gamewin->player_map != 10){
 
 		if (mp) {
 			write(CLIENT,"READY", 6);
 			while(!READY) sleep(1);
-            gamewin->enemy_map = calloc(100, sizeof(char));
+            		gamewin->enemy_map = calloc(100, sizeof(char));
 			wtimeout(gamewin->enemyfield, 5);
 		}
 		else gamewin->enemy_map = setup_enemy();
@@ -327,9 +327,9 @@ void game_loop(game_win *gamewin, bool mp){
 						write(CLIENT,(char*)msg, 4);
 					} else {
 						if(gamewin->enemy_map[cds(y,x)] != 0 && gamewin->enemy_map[cds(y,x)] != 8){
-                            gamewin->enemy_map[cds(y,x)] = 7;
+                            				gamewin->enemy_map[cds(y,x)] = 7;
 						} else {
-                            gamewin->enemy_map[cds(y,x)] = 8;
+                            				gamewin->enemy_map[cds(y,x)] = 8;
 						}
 					}
 					turn = false;
@@ -348,9 +348,9 @@ void game_loop(game_win *gamewin, bool mp){
 					ey = rand() % 10;
 						
 					if(gamewin->player_map[cds(ey,ex)] != 0 && gamewin->player_map[cds(ey,ex)] != 8){
-                        gamewin->player_map[cds(ey,ex)] = 7;
+                        			gamewin->player_map[cds(ey,ex)] = 7;
 					} else {
-                        gamewin->player_map[cds(ey,ex)] = 8;
+                        			gamewin->player_map[cds(ey,ex)] = 8;
 					}
 					turn = true;
 					werase(gamewin->playerfield);
@@ -377,14 +377,14 @@ void game_loop(game_win *gamewin, bool mp){
 }
 
 game_win *create_gamewin(){
-    game_win *gamewin = calloc(1, sizeof(game_win));
+    	game_win *gamewin = calloc(1, sizeof(game_win));
 	gamewin->win = derwin(master, 31, 138, LINES/3, (COLS/2)-(138/2));
 	refresh();
 	box(gamewin->win, 0, 0);
 	mvwprintw(gamewin->win, 30, 66, " Move:[UP,DOWN,LEFT,RIGHT] Place Ship/Fire:[ENTER] Rotate Ship:[SPACE] ");
 	setup_fields(gamewin);
 	wrefresh(gamewin->win);
-    return gamewin;
+    	return gamewin;
 }
 
 void close_gamewin(game_win *gamewin){
@@ -400,14 +400,14 @@ void close_gamewin(game_win *gamewin){
 	wrefresh(gamewin->enemyfleet);
 	wrefresh(gamewin->radiolog);
 	wrefresh(gamewin->win);
-    delwin(gamewin->playerfield);
-    delwin(gamewin->playerfleet);
-    delwin(gamewin->enemyfield);
-    delwin(gamewin->enemyfleet);
-    delwin(gamewin->radiolog);
-    delwin(gamewin->win);
+    	delwin(gamewin->playerfield);
+    	delwin(gamewin->playerfleet);
+    	delwin(gamewin->enemyfield);
+    	delwin(gamewin->enemyfleet);
+    	delwin(gamewin->radiolog);
+    	delwin(gamewin->win);
 	refresh();
-    free(gamewin);
+    	free(gamewin);
 }
 
 void error(const char *msg){
@@ -448,14 +448,14 @@ void getparse_msg(game_win *gamewin){
 			READY = true;
 		}
 		if (strcmp(buffer, "HIT") == 0){
-            gamewin->enemy_map[cds(my, mx)] = 7;
+            		gamewin->enemy_map[cds(my, mx)] = 7;
 			werase(gamewin->enemyfield);
 			print_field(gamewin->enemyfield, gamewin->win, 2, 93, " Enemy BattleField ");
 			draw_map(gamewin->enemyfield, gamewin->enemy_map, false);
 			wrefresh(gamewin->enemyfield);
 		}
 		if (strcmp(buffer, "MISS") == 0){
-            gamewin->enemy_map[cds(my, mx)] = 8;
+            		gamewin->enemy_map[cds(my, mx)] = 8;
 			werase(gamewin->enemyfield);
 			print_field(gamewin->enemyfield, gamewin->win, 2, 93, " Enemy BattleField ");
 			draw_map(gamewin->enemyfield, gamewin->enemy_map, false);
@@ -465,10 +465,10 @@ void getparse_msg(game_win *gamewin){
 			int y = buffer[1]-'0';
 			int x = buffer[2]-'0';
 			if (gamewin->player_map[cds(y,x)] != 0 && gamewin->player_map[cds(y,x)] != 8){
-                gamewin->player_map[cds(y,x)] = 7;
+                		gamewin->player_map[cds(y,x)] = 7;
 				n = write(CLIENT, "HIT", 3);
 			} else {
-                gamewin->player_map[cds(y,x)] = 8;
+                		gamewin->player_map[cds(y,x)] = 8;
 				n = write(CLIENT, "MISS", 4);
 			}
 			werase(gamewin->playerfield);
@@ -572,71 +572,47 @@ void *init_client(void *gamewin){
 	pthread_exit((void *)1);
 } 
 
-void multiplayer_host(){
+void multiplayer(bool mode){
+	
+	/* bool mode: Flag true for client, false for host */
 
-    ERROR = false;
-    game_win *gamewin = create_gamewin();
+	// Set ERROR flag and create game window
+    	ERROR = false;
+    	game_win *gamewin = create_gamewin();
 
+	// Create socket thread
 	pthread_t tid;
-	pthread_create(&tid, NULL, init_host, (void *)gamewin);
-
+	pthread_create(&tid, NULL, mode ? init_client : init_host, (void *)gamewin);
+	
+	// Print to screen log
 	wmove(gamewin->radiolog, 1, 3);
-	wprintw(gamewin->radiolog, "Waiting for player... ");
+	wprintw(gamewin->radiolog, mode ? "Connecting to host... " : "Waiting for player... ");
 	wrefresh(gamewin->radiolog);
 
+	// Wait for connection to host, error or exit signal
+	wtimeout(gamewin->enemyfield, 5);
 	while(!CONNECTED && !ERROR){
-		wtimeout(gamewin->enemyfield, 5);
 		int key = wgetch(gamewin->enemyfield);
-		if (key == 27){ 
-			wtimeout(gamewin->enemyfield, -1);
-			close_gamewin(gamewin);
-			close(SERVER);
-			pthread_cancel(tid);
-			return;
-		}
-		sleep(1);
-	}
-    wtimeout(gamewin->enemyfield, -1);
-    if (!ERROR) {
-        wprintw(gamewin->radiolog, "Player connected. ");
-        wrefresh(gamewin->radiolog);
-        game_loop(gamewin, true);
-    }
-	close_gamewin(gamewin);
-}
-
-void multiplayer_client(){
-
-    ERROR = false;
-    game_win *gamewin = create_gamewin();
-
-	pthread_t tid;
-	pthread_create(&tid, NULL, init_client, (void *)gamewin);
-
-	wmove(gamewin->radiolog, 1, 3);
-	wprintw(gamewin->radiolog, "Connecting to host... ");
-	wrefresh(gamewin->radiolog);
-
-	while(!CONNECTED && !ERROR){
-		wtimeout(gamewin->enemyfield, 5);
-		int key = wgetch(gamewin->enemyfield);
-		if (key == 27){ 
+		if (key == 27){ // if ESC is pressed, exit
 			wtimeout(gamewin->enemyfield, -1);
 			close_gamewin(gamewin);
 			close(CLIENT);
+			if (!mode) close(SERVER);
 			pthread_cancel(tid);
 			return;
 		}
 		sleep(1);
 	}
-    wtimeout(gamewin->enemyfield, -1);
+    	wtimeout(gamewin->enemyfield, -1);
+	
+	// Connection successful
 	if (!ERROR) {
-        wprintw(gamewin->radiolog, "Connected to host. ");
-        wrefresh(gamewin->radiolog);
-
-        turn = false;
-        game_loop(gamewin, true);
-    }
+        	wprintw(gamewin->radiolog, mode ? "Connected to host. " : "Player connected. ");
+        	wrefresh(gamewin->radiolog);
+		// Start game
+        	if(mode) turn = false;
+        	game_loop(gamewin, true);
+    	}
 	close_gamewin(gamewin);
 }
 
@@ -659,18 +635,22 @@ void print_main_menu(WINDOW* win, bool mp, int c){
 }
 
 void mph_menu(WINDOW *win){
-
+	
+	// Print menu entrys
 	werase(win);
 	box(win, 0, 0);	
 	mvwprintw(win, 0, 3, " Multi Player ");
 	mvwprintw(win, 4, 6, "- Port: ");
 	wrefresh(win);
+
+	// Allocate space for port string
 	char *p = calloc(6, sizeof(char));
 	char *c = p;
+
 	int key;
 	do{
 		key = wgetch(win);
-		if (key == 263){
+		if (key == 263){ // Backspace
 			int y, x;
 			getyx(win, y, x);
 			if (x > 14){
@@ -679,13 +659,13 @@ void mph_menu(WINDOW *win){
 				*c = '\0';
 				c--;
 			}
-		} else if (key == 10){
+		} else if (key == 10){ // Enter
 			curs_set(0);
 			PORT= atoi(p);
-            werase(win);
-			multiplayer_host();
+            		werase(win);
+			multiplayer(false);
 			break;
-		} else if (key >= '0' && key <= '9') {
+		} else if (key >= '0' && key <= '9') { // handle digits
 			wprintw(win, "%c", (char)key);
 			*c = (char)key;
 			c++;
@@ -695,24 +675,30 @@ void mph_menu(WINDOW *win){
 
 void mpc_menu(WINDOW *win){
 
+	// Print menu entrys
 	werase(win);
 	box(win, 0, 0);	
 	mvwprintw(win, 0, 3, " Multi Player ");
 	mvwprintw(win, 3, 6, "- Address:");
 	mvwprintw(win, 5, 6, "- Port:");
 	wrefresh(win);
+
+	// Allocate space for IP and port strings
 	char *p = calloc(16, sizeof(char));
 	char *c = p;
 	char *a = calloc(6, sizeof(char));
 	char *d = a;
+
+	//Initialize variables and window curosr
 	int key;
 	bool field = false;
 	int y, x;
 	getyx(win, y, x);
 	wmove(win, y-2, 17);
+
 	do{
 		key = wgetch(win);
-		if (key == 263){
+		if (key == 263){ // Backspace
 			getyx(win, y, x);
 			if (x > (field ? 14 : 17)){
 				mvwprintw(win, y, x-1, " ");
@@ -733,14 +719,14 @@ void mpc_menu(WINDOW *win){
 			getyx(win, y, x);
 			field = true;
 			wmove(win, y+2, 14+(c-p));
-		} else if (key == 10){
+		} else if (key == 10){ // Enter
 			curs_set(0);
 			ADDRESS = a;
 			PORT = atoi(p);
-            werase(win);
-			multiplayer_client();
+           		werase(win);
+			multiplayer(true);
 			break;
-		} else if (key >= '0' && key <= '9' || key == '.'){
+		} else if ((key >= '0' && key <= '9') || key == '.'){ // handle digits and periods
 			wprintw(win, "%c", (char)key);
 			if(field){
 				*c = (char)key;
@@ -774,35 +760,35 @@ void main_menu(){
 		
 			if(key == KEY_UP) cursor--;
 			if(key == KEY_DOWN) cursor++;
-				
+			
 		} while (key != 10);
 		switch(cursor){
-			case 0:
-				if(!multiplayer){
-                    werase(mainwin);
+			case 0:	
+				if(!multiplayer){ // Singleplayer entry
+                    			werase(mainwin);
 					game_win *gamewin = create_gamewin();
 					game_loop(gamewin, false);
 					close_gamewin(gamewin);
-				} else{
+				} else{ // Multiplayer host submenu
 					curs_set(1);
 					mph_menu(mainwin);
 					curs_set(0);
 				}
 				break;
 			case 1:
-				if(!multiplayer){
+				if(!multiplayer){ // Multiplayer entry
 					cursor = 0;
 					multiplayer = true;
-				} else {
+				} else { // Multiplayer join submenu
 					curs_set(1);
 					mpc_menu(mainwin);
 					curs_set(0);	
 				}
 				break;
 			case 2:
-				if(!multiplayer){
+				if(!multiplayer){ // Quit entry
 				       	quit = true;
-				} else {
+				} else { // Multiplayer emnu back entry
 					cursor = 0;
 					multiplayer = false;
 				}
@@ -830,7 +816,7 @@ int main(int argc, char **argv){
 	print_title_screen(master, true);
 	getch();
 	werase(master);
-    print_title_screen(master, false);
+    	print_title_screen(master, false);
 
 	main_menu();	
 	
