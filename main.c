@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <curses.h>
 #include <locale.h>
 #include <time.h>
@@ -665,8 +666,8 @@ void print_main_menu(WINDOW* win, int mp, int c){
 	mvwprintw(win, 9, 15, " Scroll:[UP, DOWN] Select:[ENTER] ");
     
 	char *mmenu[3] = {"- Single Player", "- Multi Player", "- Exit"};
-	char *mpmenu[3] = {"- Host Game [1v1 Classic]", "- Join Game", "- Back"};
-	char *jmenu[3] = {"- 1v1 Classic", "- Multiuser Skirmish", "- Back"};
+	char *mpmenu[3] = {"- Host Classic Game", "- Join Game", "- Back"};
+	char *jmenu[3] = {"- Classic", "- Multiuser", "- Back"};
 
 	char **menu;
 	switch(mp){
@@ -795,13 +796,102 @@ void mpc_menu(WINDOW *win){
 	} while (key != 27);	
 }
 
-void mpj_menu(WINDOW *win){
+char *get_username(){
 
-	werase(win);
-	box(win, 0, 0);
-	mvwprintw(win, 0, 3, " Join Game ");
+	WINDOW *win = derwin(master, 3, 48, LINES/2-1, COLS/2-48/2);
+	keypad(win, true);
+	refresh();
 	
+	box(win, 0, 0);
+	mvwprintw(win, 0, 3, " Provide a username ");
+	wrefresh(win);
 
+	wmove(win, 1, 3);
+
+	curs_set(1);
+
+	char *un = calloc(20, sizeof(char));
+	char *c = un;
+
+	int key;
+	do{
+	
+		key = wgetch(win);
+		
+		if (key == 263) { // Backspace
+			int y, x;
+			getyx(win, y, x);
+			if (x > 3){
+				mvwprintw(win, y, x-1, " ");
+				wmove(win, y, x-1);
+				*c = '\0';
+				c--;
+			}
+		} else if (key == 10) {
+			*c = '\0';
+			break;
+		} else if (key == 27) {
+			un = NULL;
+			break;
+		} else if (c-un < 20) {
+			wprintw(win, "%c", (char)key);
+			*c = (char)key;
+			c++;
+		}
+	
+	}while(true);
+	
+	curs_set(0);
+	keypad(win, false);
+	werase(win);
+	wrefresh(win);
+	delwin(win);
+	refresh();
+	return un;
+
+}
+
+void serverselect_menu(){
+
+	WINDOW *serverselect = derwin(master, 20, 50, LINES/3, COLS/2-50/2);
+	refresh();
+	
+	box(serverselect, 0, 0);
+	mvwprintw(serverselect, 0, 3, " Server Select ");
+	wrefresh(serverselect);
+	
+	char *username;
+	FILE* muconf = fopen("multiuser.conf", "r+");
+
+	if (muconf == NULL){ // File didnt exist
+		username = get_username();
+		if (username == NULL) {
+			fclose(muconf);
+			werase(serverselect);
+			wrefresh(serverselect);
+			delwin(serverselect);
+			refresh();
+			return;
+		}
+		mvwprintw(serverselect, 2, 3, "%s", username);	
+		muconf = fopen("multiuser.conf", "w+");
+		fprintf(muconf, "%s\n", username); 
+	} else {
+		username = calloc(20, sizeof(char));
+		fscanf(muconf, "%s", username);
+		mvwprintw(serverselect, 2, 3, "%s", username);	
+	}
+	
+	wrefresh(serverselect);	
+	
+	if (muconf != NULL) fclose(muconf);
+
+	getch();
+
+	werase(serverselect);
+	wrefresh(serverselect);
+	delwin(serverselect);
+	refresh();
 }
 
 void main_menu(){
@@ -829,7 +919,7 @@ void main_menu(){
 		} while (key != 10);
 		switch(cursor){
 		case 0:	
-			switch(mp){
+			switch(page){
 			case 0: // Singleplayer entry
                    		werase(mainwin);
 				game_win *gamewin = create_gamewin();
@@ -851,7 +941,7 @@ void main_menu(){
 			}
 		break;
 		case 1:
-			switch(mp){
+			switch(page){
 			case 0: // Multiplayer entry
 				cursor = 0;
 				page = 1;
@@ -862,12 +952,13 @@ void main_menu(){
 				break;
 			case 2: // Join Multiuser skirmish submenu
 				werase(mainwin);
-				
+				wrefresh(mainwin);
+				serverselect_menu();
 				break;
 			}
 		break;
 		case 2:
-			switch(mp){
+			switch(page){
 			case 0:  // Quit entry
 				quit = true;
 				break;
