@@ -31,7 +31,7 @@ int CLIENT, SERVER;
 char *ADDRESS;
 int PORT;
 bool turn = true;
-int mx, my;
+int mx, my, line = 1;
 
 void init_curses(){
 	setlocale(LC_ALL, "");
@@ -320,6 +320,14 @@ void game_loop(game_win *gamewin, bool mp){
 				if (key == KEY_LEFT) x--;
 				if (key == KEY_RIGHT) x++;
 				if (key == 10){
+					int rly, rlx;
+					getyx(gamewin->radiolog, rly, rlx);
+					if (rlx > 110) {
+						line++;
+						wmove(gamewin->radiolog, line, 3);
+						wrefresh(gamewin->radiolog);
+					}
+					wprintw(gamewin->radiolog, "Firing at %c%d. ", 'A'+x, y);
 					if (mp){
 						char msg[4] = {'F', '0'+y, '0'+x, '\0'};
 						mx = x;
@@ -327,11 +335,14 @@ void game_loop(game_win *gamewin, bool mp){
 						write(CLIENT,(char*)msg, 4);
 					} else {
 						if(gamewin->enemy_map[cds(y,x)] != 0 && gamewin->enemy_map[cds(y,x)] != 8){
-                            				gamewin->enemy_map[cds(y,x)] = 7;
+                            				wprintw(gamewin->radiolog, "HIT  ");		
+							gamewin->enemy_map[cds(y,x)] = 7;
 						} else {
-                            				gamewin->enemy_map[cds(y,x)] = 8;
+                            				wprintw(gamewin->radiolog, "MISS ");		
+							gamewin->enemy_map[cds(y,x)] = 8;
 						}
 					}
+					wrefresh(gamewin->radiolog);
 					turn = false;
 				}
 				wrefresh(gamewin->enemyfield);
@@ -427,14 +438,21 @@ void error(const char *msg){
 void getparse_msg(game_win *gamewin){
 
 	int n;
-	char *buffer; 
-	
+	char *buffer;	
+
 	while(CONNECTED){	
 	
 		buffer = calloc(256, sizeof(char));
 
 		n = read(CLIENT,buffer,255);
 		if (CONNECTED){			
+			int rly, rlx;
+			getyx(gamewin->radiolog, rly, rlx);
+			if (rlx > 127-n){
+				line ++;
+			       	wmove(gamewin->radiolog, line, 3);
+				wrefresh(gamewin->radiolog);
+			}
 			wprintw(gamewin->radiolog, "%s ", buffer);
 			wrefresh(gamewin->radiolog);
 		}
@@ -477,9 +495,9 @@ void getparse_msg(game_win *gamewin){
 			wrefresh(gamewin->playerfield);
 			turn = true;
 		}
-		if (strcmp(buffer, "ACK") != 0){	
-			n = write(CLIENT,"ACK",3);
-		}
+		//if (strcmp(buffer, "ACK") != 0){	
+		//	n = write(CLIENT,"ACK",3);
+		//}
 		if (strcmp(buffer, "DISC") == 0){
 			CONNECTED = false;
 			return;
@@ -498,7 +516,7 @@ void *init_host(void *gamewin){
 	SERVER = socket(AF_INET, SOCK_STREAM, 0);
 	if (SERVER < 0) {
 		error("ERROR opening socket");
-        ERROR = true;
+        	ERROR = true;
 		pthread_exit((void *)-1);
 	}
 	
@@ -509,8 +527,8 @@ void *init_host(void *gamewin){
 
 	if (bind(SERVER, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
 		error("ERROR on binding");
-        ERROR = true;
-        close(SERVER);
+        	ERROR = true;
+        	close(SERVER);
 		pthread_exit((void *)-1);
 	}
 
@@ -519,8 +537,8 @@ void *init_host(void *gamewin){
 	CLIENT = accept(SERVER, (struct sockaddr *) &cli_addr, &clilen);
 
 	if (CLIENT < 0){
-        error("ERROR on accept");
-        ERROR = true;
+        	error("ERROR on accept");
+        	ERROR = true;
 		pthread_exit((void *)-1);
 	}
 	
@@ -547,7 +565,7 @@ void *init_client(void *gamewin){
 
 	if (server == NULL) {
 		error("ERROR, no such host");
-        ERROR = true;
+        	ERROR = true;
 		pthread_exit((void *)1);
 	}
 	
@@ -558,8 +576,8 @@ void *init_client(void *gamewin){
 	
 	if (connect(CLIENT,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) {
 		error("ERROR connecting");
-        ERROR = true;
-        close(CLIENT);
+        	ERROR = true;
+        	close(CLIENT);
 		pthread_exit((void *)1);
 	}
 	
@@ -596,8 +614,8 @@ void multiplayer(bool mode){
 		if (key == 27){ // if ESC is pressed, exit
 			wtimeout(gamewin->enemyfield, -1);
 			close_gamewin(gamewin);
-			close(CLIENT);
-			if (!mode) close(SERVER);
+			if(mode) close(CLIENT);
+			else close(SERVER);
 			pthread_cancel(tid);
 			return;
 		}
@@ -767,6 +785,8 @@ void main_menu(){
 				if(!multiplayer){ // Singleplayer entry
                     			werase(mainwin);
 					game_win *gamewin = create_gamewin();
+					wmove(gamewin->radiolog, 1, 3);
+					wrefresh(gamewin->radiolog);
 					game_loop(gamewin, false);
 					close_gamewin(gamewin);
 				} else{ // Multiplayer host submenu
