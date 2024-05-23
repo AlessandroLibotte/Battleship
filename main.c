@@ -445,6 +445,7 @@ void getparse_msg(game_win *gamewin){
 		buffer = calloc(256, sizeof(char));
 
 		n = read(CLIENT,buffer,255);
+
 		if (CONNECTED){			
 			int rly, rlx;
 			getyx(gamewin->radiolog, rly, rlx);
@@ -495,9 +496,6 @@ void getparse_msg(game_win *gamewin){
 			wrefresh(gamewin->playerfield);
 			turn = true;
 		}
-		//if (strcmp(buffer, "ACK") != 0){	
-		//	n = write(CLIENT,"ACK",3);
-		//}
 		if (strcmp(buffer, "DISC") == 0){
 			CONNECTED = false;
 			return;
@@ -507,12 +505,15 @@ void getparse_msg(game_win *gamewin){
 
 void *init_host(void *gamewin){
 	
+	// Set thread cancel type to asynchronus to allow for instant cancelation on cancel signal reception 
 	int oldt;	
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldt);	
-
+	
+	// Allocate space for socket server variables and structs
 	socklen_t clilen;
 	struct sockaddr_in serv_addr, cli_addr;
 
+	// Open socket
 	SERVER = socket(AF_INET, SOCK_STREAM, 0);
 	if (SERVER < 0) {
 		error("ERROR opening socket");
@@ -520,18 +521,21 @@ void *init_host(void *gamewin){
 		pthread_exit((void *)-1);
 	}
 	
+	// Populate socket server structs
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
 	serv_addr.sin_port = htons(PORT);
 
+	// Bind socket address to server 
 	if (bind(SERVER, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
 		error("ERROR on binding");
         	ERROR = true;
         	close(SERVER);
 		pthread_exit((void *)-1);
 	}
-
+	
+	// Listen for client connection and accept connection
 	listen(SERVER,5);
 	clilen = sizeof(cli_addr);
 	CLIENT = accept(SERVER, (struct sockaddr *) &cli_addr, &clilen);
@@ -543,7 +547,8 @@ void *init_host(void *gamewin){
 	}
 	
 	CONNECTED = true;
-
+	
+	// Start parseing message
 	getparse_msg((game_win*)gamewin);
 
 	close(SERVER);
@@ -554,12 +559,15 @@ void *init_host(void *gamewin){
 
 void *init_client(void *gamewin){
 	
+	// Set thread cancel type to asynchronus to allow for instant cancelation on cancel signal reception 
 	int oldt;	
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldt);	
 
+	// Allocate space for socket client structs
 	struct sockaddr_in serv_addr;
 	struct hostent *server;
 	
+	// Open socket and get host
 	CLIENT = socket(AF_INET, SOCK_STREAM, 0);
 	server = gethostbyname(ADDRESS);
 
@@ -569,11 +577,13 @@ void *init_client(void *gamewin){
 		pthread_exit((void *)1);
 	}
 	
+	// Populate socket client structs
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
 	bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
 	serv_addr.sin_port = htons(PORT);
 	
+	// Connect to host
 	if (connect(CLIENT,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) {
 		error("ERROR connecting");
         	ERROR = true;
@@ -583,6 +593,7 @@ void *init_client(void *gamewin){
 	
 	CONNECTED = true;
 
+	// Start parseing messages
 	getparse_msg((game_win*)gamewin);
 
 	close(CLIENT);
