@@ -443,9 +443,15 @@ void getparse_msg(game_win *gamewin){
 	while(CONNECTED){	
 	
 		buffer = calloc(256, sizeof(char));
-
+		
+		// Read form socket
 		n = read(CLIENT,buffer,255);
+		if (n < 0) {
+			error("ERROR reading from socket");
+			pthread_exit((void *)-1);
+		}
 
+		// Print to screen log
 		if (CONNECTED){			
 			int rly, rlx;
 			getyx(gamewin->radiolog, rly, rlx);
@@ -458,48 +464,53 @@ void getparse_msg(game_win *gamewin){
 			wrefresh(gamewin->radiolog);
 		}
 	
-		if (n < 0) {
-			error("ERROR reading from socket");
-			pthread_exit((void *)-1);
-		}
-
+		// Parse message and act on it 
 		if (strcmp(buffer, "READY") == 0){
-			READY = true;
+			READY = true; // Set ready flag
 		}
 		if (strcmp(buffer, "HIT") == 0){
-            		gamewin->enemy_map[cds(my, mx)] = 7;
+            		gamewin->enemy_map[cds(my, mx)] = 7; // Set enemy map to hit marker
+			// Redraw enemy field
 			werase(gamewin->enemyfield);
 			print_field(gamewin->enemyfield, gamewin->win, 2, 93, " Enemy BattleField ");
 			draw_map(gamewin->enemyfield, gamewin->enemy_map, false);
 			wrefresh(gamewin->enemyfield);
 		}
 		if (strcmp(buffer, "MISS") == 0){
-            		gamewin->enemy_map[cds(my, mx)] = 8;
+            		gamewin->enemy_map[cds(my, mx)] = 8; // Set enemy map to miss marker
+			// Redraw enemy field
 			werase(gamewin->enemyfield);
 			print_field(gamewin->enemyfield, gamewin->win, 2, 93, " Enemy BattleField ");
 			draw_map(gamewin->enemyfield, gamewin->enemy_map, false);
 			wrefresh(gamewin->enemyfield);
 		}
-		if (buffer[0] == 'F'){
+		if (buffer[0] == 'F'){ // Enemy fire message format : F[y][x] 
+			// Convert coordinates to int 
 			int y = buffer[1]-'0';
 			int x = buffer[2]-'0';
 			if (gamewin->player_map[cds(y,x)] != 0 && gamewin->player_map[cds(y,x)] != 8){
-                		gamewin->player_map[cds(y,x)] = 7;
-				n = write(CLIENT, "HIT", 3);
+				// If there is a player ship
+                		gamewin->player_map[cds(y,x)] = 7; // Set player map to hit marker
+				n = write(CLIENT, "HIT", 3); // Send back hit message
 			} else {
-                		gamewin->player_map[cds(y,x)] = 8;
-				n = write(CLIENT, "MISS", 4);
+				// If the re isn't a player ship
+                		gamewin->player_map[cds(y,x)] = 8; // Set player map to miss marker
+				n = write(CLIENT, "MISS", 4); // Send back miss message
 			}
+			// Redraw player field
 			werase(gamewin->playerfield);
 			print_field(gamewin->playerfield, gamewin->win, 2, 4, " Your Battlefield ");
 			draw_map(gamewin->playerfield, gamewin->player_map, true);
 			wrefresh(gamewin->playerfield);
+			// Change turn
 			turn = true;
 		}
-		if (strcmp(buffer, "DISC") == 0){
+		if (strcmp(buffer, "DISC") == 0){ // Enemy disconnected
 			CONNECTED = false;
 			return;
 		}
+
+		free(buffer);
 	}
 }
 
@@ -694,7 +705,7 @@ void mph_menu(WINDOW *win){
             		werase(win);
 			multiplayer(false);
 			break;
-		} else if (key >= '0' && key <= '9') { // handle digits
+		} else if (key >= '0' && key <= '9') { // Handle digits
 			wprintw(win, "%c", (char)key);
 			*c = (char)key;
 			c++;
@@ -755,7 +766,7 @@ void mpc_menu(WINDOW *win){
            		werase(win);
 			multiplayer(true);
 			break;
-		} else if ((key >= '0' && key <= '9') || key == '.'){ // handle digits and periods
+		} else if ((key >= '0' && key <= '9') || key == '.'){ // Handle digits and periods
 			wprintw(win, "%c", (char)key);
 			if(field){
 				*c = (char)key;
@@ -831,18 +842,18 @@ void main_menu(){
 
 int main(int argc, char **argv){
 
-    init_curses();
+    	init_curses();
 
-    curs_set(0);
+    	curs_set(0);
 
-    int y, x;
-    getmaxyx(master, y, x);
-    if (y < 32|| x < 139){
-        error("ERROR, terminal window too small.");
-        endwin();
-        curs_set(1);
-        return 1;
-    }
+    	int y, x;
+    	getmaxyx(master, y, x);
+    	if (y < 32|| x < 139){
+    	    	error("ERROR, terminal window too small.");
+    	    	endwin();
+    	    	curs_set(1);
+    		return 1;
+    	}
 
 	print_title_screen(master, true);
 	getch();
