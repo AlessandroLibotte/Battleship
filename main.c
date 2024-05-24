@@ -321,14 +321,6 @@ void game_loop(game_win *gamewin, bool mp){
 				if (key == KEY_LEFT) x--;
 				if (key == KEY_RIGHT) x++;
 				if (key == 10){
-					int rly, rlx;
-					getyx(gamewin->radiolog, rly, rlx);
-					if (rlx > 110) {
-						line++;
-						wmove(gamewin->radiolog, line, 3);
-						wrefresh(gamewin->radiolog);
-					}
-					wprintw(gamewin->radiolog, "Firing at %c%d. ", 'A'+x, y);
 					if (mp){
 						char msg[4] = {'F', '0'+y, '0'+x, '\0'};
 						mx = x;
@@ -336,10 +328,8 @@ void game_loop(game_win *gamewin, bool mp){
 						write(CLIENT,(char*)msg, 4);
 					} else {
 						if(gamewin->enemy_map[cds(y,x)] != 0 && gamewin->enemy_map[cds(y,x)] != 8){
-                            				wprintw(gamewin->radiolog, "HIT  ");		
 							gamewin->enemy_map[cds(y,x)] = 7;
 						} else {
-                            				wprintw(gamewin->radiolog, "MISS ");		
 							gamewin->enemy_map[cds(y,x)] = 8;
 						}
 					}
@@ -798,7 +788,7 @@ void mpc_menu(WINDOW *win){
 
 char *get_username(){
 
-	WINDOW *win = derwin(master, 3, 48, LINES/2-1, COLS/2-48/2);
+	WINDOW *win = derwin(master, 3, 22, LINES/2-1, COLS/2-22/2);
 	keypad(win, true);
 	refresh();
 	
@@ -851,14 +841,7 @@ char *get_username(){
 
 }
 
-void serverselect_menu(){
-
-	WINDOW *serverselect = derwin(master, 20, 50, LINES/3, COLS/2-50/2);
-	refresh();
-	
-	box(serverselect, 0, 0);
-	mvwprintw(serverselect, 0, 3, " Server Select ");
-	wrefresh(serverselect);
+void serverlist_menu(){
 	
 	char *username;
 	FILE* muconf = fopen("multiuser.conf", "r+");
@@ -867,30 +850,80 @@ void serverselect_menu(){
 		username = get_username();
 		if (username == NULL) {
 			fclose(muconf);
-			werase(serverselect);
-			wrefresh(serverselect);
-			delwin(serverselect);
 			refresh();
 			return;
 		}
-		mvwprintw(serverselect, 2, 3, "%s", username);	
 		muconf = fopen("multiuser.conf", "w+");
 		fprintf(muconf, "%s\n", username); 
 	} else {
 		username = calloc(20, sizeof(char));
 		fscanf(muconf, "%s", username);
-		mvwprintw(serverselect, 2, 3, "%s", username);	
 	}
-	
-	wrefresh(serverselect);	
-	
-	if (muconf != NULL) fclose(muconf);
 
-	getch();
+	//if there are servers saved in the config file get them 
+	int numservers = 3;
+	char *servers[3] = {"EU Skirmish", "US Skirmish", "Asia Skirmish"};
+	
+	WINDOW *serverwin = derwin(master, 20, 50, LINES/3, COLS/2-50/2);
+	WINDOW *serverdash = derwin(serverwin, 3, 48, 16, 1); 
+	refresh();
+	keypad(serverwin, true);
 
-	werase(serverselect);
-	wrefresh(serverselect);
-	delwin(serverselect);
+	char *dash_entrys[3] = {"Connect", "Edit", "Add"};
+
+	int key;
+	int serv_cursor = 0;
+	int dash_cursor = 0;
+	do{
+
+		if (serv_cursor > numservers) serv_cursor = numservers;
+		if (serv_cursor < 0) serv_cursor = 0;
+		if (dash_cursor > 2) dash_cursor = 2;
+		if (dash_cursor < 0) dash_cursor = 0;
+
+		werase(serverwin);
+		box(serverwin, 0, 0);
+		mvwprintw(serverwin, 0, 3, " Server Select ");
+		werase(serverdash);
+		box(serverdash, 0, 0);
+		wrefresh(serverdash);
+		wrefresh(serverwin);
+
+		for(int i = 0; i < numservers; i++){
+			if (i == serv_cursor) wattron(serverwin, A_REVERSE);
+			mvwprintw(serverwin, 2+i, 3, "%s", servers[i]);
+			wattroff(serverwin, A_REVERSE);
+		}
+		
+		wmove(serverdash, 1, 3);
+		for(int i = 0; i < 3; i++){
+			if (i == dash_cursor) wattron(serverdash, A_REVERSE);
+			wprintw(serverdash, "%s", dash_entrys[i]);
+			wattroff(serverdash, A_REVERSE);
+			wprintw(serverdash, "\t");
+		}
+	
+		wrefresh(serverdash);	
+		wrefresh(serverwin);
+		
+		key = wgetch(serverwin);
+		
+		if (key == KEY_UP) serv_cursor--;
+		if (key == KEY_DOWN) serv_cursor++;
+		if (key == KEY_RIGHT) dash_cursor++;
+		if (key == KEY_LEFT) dash_cursor--;
+
+	}while(key != 27);
+	
+	fclose(muconf);
+
+	keypad(serverwin, false);
+	werase(serverdash);
+	werase(serverwin);
+	wrefresh(serverdash);
+	wrefresh(serverwin);
+	delwin(serverdash);
+	delwin(serverwin);
 	refresh();
 }
 
@@ -953,7 +986,7 @@ void main_menu(){
 			case 2: // Join Multiuser skirmish submenu
 				werase(mainwin);
 				wrefresh(mainwin);
-				serverselect_menu();
+				serverlist_menu();
 				break;
 			}
 		break;
