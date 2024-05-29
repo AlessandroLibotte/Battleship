@@ -833,6 +833,9 @@ server_t *add_server(WINDOW *serverwin){
 		key = wgetch(win);
 		
 		if (key == 10){
+			*cn = '\0';
+			*ca = '\0';
+			*cp = '\0';
 			server = calloc(1, sizeof(server_t));
 			server->name = n;
 			server->ip = a;
@@ -970,7 +973,7 @@ void serverlist_menu(){
 			return;
 		}
 		muconf = fopen("multiuser.conf", "w+");
-		fprintf(muconf, "%s\n0\n", username); 
+		fprintf(muconf, "%s 0 ", username); 
 	} else {
 		username = calloc(20, sizeof(char));
 		fscanf(muconf, "%s", username);
@@ -1044,13 +1047,12 @@ void serverlist_menu(){
 				server_t *server = add_server(serverwin);
 				if (server != NULL){
 
-					
 					numservers++;
-					muconf = fopen("multiuser.conf", "a");
-					fprintf(muconf, "%s %s %d\n", server->name, server->ip, server->port);
-					rewind(muconf);
-					fseek(muconf, strlen(username), SEEK_SET);
-					fprintf(muconf, "%d\n", numservers);
+					muconf = fopen("multiuser.conf", "r+");
+					fseek(muconf, strlen(username)+1, SEEK_SET);
+					fprintf(muconf, "%d", numservers);
+					fseek(muconf, 0, SEEK_END);
+					fprintf(muconf, "%s %s %d ", server->name, server->ip, server->port);	
 					fclose(muconf);
 
 					server_t *new_servers = calloc(numservers, sizeof(server_t));
