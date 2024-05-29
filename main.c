@@ -25,6 +25,12 @@ typedef struct game_win{
     	char *enemy_map;
 }game_win;
 
+typedef struct server_t {
+	char *name;
+	char *ip;
+	int port;
+} server_t;
+
 bool CONNECTED = false;
 bool READY = false;
 bool ERROR = false;
@@ -786,12 +792,118 @@ void mpc_menu(WINDOW *win){
 	} while (key != 27);	
 }
 
+server_t *add_server(WINDOW *serverwin){
+	
+	WINDOW *win = derwin(serverwin, 9, 48, 4, 1);
+	keypad(win, true);
+	refresh();
+	
+	werase(win);
+	
+	box(win, 0, 0);
+	mvwprintw(win, 0, 3, " Add Server ");
+	wrefresh(win);
+
+	mvwprintw(win, 2, 3, "Server name: ");
+	mvwprintw(win, 4, 3, "Server ip: ");
+	mvwprintw(win, 6, 3, "Server port: ");
+
+	server_t *server = NULL;
+
+	int key;
+	
+	char *n = calloc(20, sizeof(char));
+	char *a = calloc(16, sizeof(char));
+        char *p = calloc(6,  sizeof(char));
+	char *cn = n;
+	char *ca = a;
+	char *cp = p;
+
+	int field = 1;
+	
+	curs_set(1);
+	do{
+
+		if (field < 1) field = 1;
+		if (field > 3) field = 3;
+		
+		if (field == 2) wmove(win, field*2, 14+(ca-a));
+		else wmove(win, field*2, field == 1 ? 16+(cn-n) : 16+(cp-p)); 
+
+		key = wgetch(win);
+		
+		if (key == 10){
+			server = calloc(1, sizeof(server_t));
+			server->name = n;
+			server->ip = a;
+			server->port = atoi(p);
+		}	
+		else if (key == KEY_UP) field--;
+		else if (key == KEY_DOWN) field ++;	
+		else {
+			if (field == 1){
+				if (key == 263 && (cn-n) > 0){
+					*cn = '\0';
+					cn--;
+					wmove(win, field*2, 16+(cn-n));
+					wprintw(win, " ");
+				}
+				if (((key >= 'a' && key <= 'z') || (key >= 'A' && key <= 'Z')) && (cn-n) < 20){	
+					wprintw(win, "%c", (char)key);
+					*cn = (char)key;
+					cn++;
+				}
+			} else {
+				if (key == 263){
+					if (field == 2 && ca-a > 0) {
+						*ca = '\0';
+						ca--;
+						wmove(win, field*2, 14+(ca-a));
+						wprintw(win, " ");
+					} 
+					if (field == 3 && cp-p > 0) {
+						*cp = '\0';
+						cp--;
+						wmove(win, field*2, 16+(cp-p));
+						wprintw(win, " ");
+					}
+				}
+				if (((key >= '0' && key <= '9') || key == '.') && (field == 2 ? (ca-a < 16) : (cp-p < 6))){
+					wprintw(win, "%c", (char)key);
+					if (field == 2){
+						*ca = (char)key;
+						ca++;
+					}
+					if (field == 3){
+						*cp = (char)key;
+						cp++;
+					}
+				}
+			}
+		}
+		wrefresh(win);
+
+	}while(key != 27);
+
+	curs_set(0);
+	keypad(win, false);
+
+	werase(win);
+	wrefresh(win);
+	delwin(win);
+	refresh();
+	
+	return server;
+}
+
 char *get_username(){
 
 	WINDOW *win = derwin(master, 3, 22, LINES/2-1, COLS/2-22/2);
 	keypad(win, true);
 	refresh();
-	
+
+	werase(win);
+
 	box(win, 0, 0);
 	mvwprintw(win, 0, 3, " Provide a username ");
 	wrefresh(win);
@@ -809,13 +921,11 @@ char *get_username(){
 		key = wgetch(win);
 		
 		if (key == 263) { // Backspace
-			int y, x;
-			getyx(win, y, x);
-			if (x > 3){
-				mvwprintw(win, y, x-1, " ");
-				wmove(win, y, x-1);
+			if (c-un > 0){	
 				*c = '\0';
 				c--;
+				wprintw(win, " ");
+				wmove(win, 1, 3+(c-un));
 			}
 		} else if (key == 10) {
 			*c = '\0';
@@ -854,16 +964,19 @@ void serverlist_menu(){
 			return;
 		}
 		muconf = fopen("multiuser.conf", "w+");
-		fprintf(muconf, "%s\n", username); 
+		fprintf(muconf, "%s\n0\n", username); 
 	} else {
 		username = calloc(20, sizeof(char));
 		fscanf(muconf, "%s", username);
 	}
 
 	//if there are servers saved in the config file get them 
-	int numservers = 3;
-	char *servers[3] = {"EU Skirmish", "US Skirmish", "Asia Skirmish"};
+	int numservers = 0;
+	fscanf(muconf, "%d", &numservers);
+	server_t *servers[5];
 	
+	fclose(muconf);
+
 	WINDOW *serverwin = derwin(master, 20, 50, LINES/3, COLS/2-50/2);
 	WINDOW *serverdash = derwin(serverwin, 3, 48, 16, 1); 
 	refresh();
@@ -883,24 +996,24 @@ void serverlist_menu(){
 
 		werase(serverwin);
 		box(serverwin, 0, 0);
-		mvwprintw(serverwin, 0, 3, " Server Select ");
+		mvwprintw(serverwin, 0, 3, " %s's Servers (%d)", username, numservers);
+
 		werase(serverdash);
 		box(serverdash, 0, 0);
+		
 		wrefresh(serverdash);
 		wrefresh(serverwin);
 
 		for(int i = 0; i < numservers; i++){
 			if (i == serv_cursor) wattron(serverwin, A_REVERSE);
-			mvwprintw(serverwin, 2+i, 3, "%s", servers[i]);
+			mvwprintw(serverwin, 2+i, 3, "%s", servers[i]->name);
 			wattroff(serverwin, A_REVERSE);
 		}
 		
-		wmove(serverdash, 1, 3);
 		for(int i = 0; i < 3; i++){
 			if (i == dash_cursor) wattron(serverdash, A_REVERSE);
-			wprintw(serverdash, "%s", dash_entrys[i]);
+			mvwprintw(serverdash, 1, 3+i*(48/3), "%s", dash_entrys[i]);
 			wattroff(serverdash, A_REVERSE);
-			wprintw(serverdash, "\t");
 		}
 	
 		wrefresh(serverdash);	
@@ -913,10 +1026,19 @@ void serverlist_menu(){
 		if (key == KEY_RIGHT) dash_cursor++;
 		if (key == KEY_LEFT) dash_cursor--;
 
+		if (key == 10){
+			if(dash_cursor == 2){
+				server_t *server = add_server(serverwin);
+				if (server != NULL){
+					muconf = fopen("multiuser.conf", "w");
+					fprintf(muconf, "%s %s %d\n", server->name, server->ip, server->port);
+					fclose(muconf);
+				}
+			}
+		}
+
 	}while(key != 27);
 	
-	fclose(muconf);
-
 	keypad(serverwin, false);
 	werase(serverdash);
 	werase(serverwin);
@@ -925,6 +1047,8 @@ void serverlist_menu(){
 	delwin(serverdash);
 	delwin(serverwin);
 	refresh();
+
+	return NULL;
 }
 
 void main_menu(){
