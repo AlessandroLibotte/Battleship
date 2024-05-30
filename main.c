@@ -987,10 +987,16 @@ void serverlist_menu(){
 	if (numservers > 0){
 		serverlist = calloc(numservers, sizeof(server_t));
 		for (int i = 0; i < numservers; i++){
-			fscanf(muconf, "%s", serverlist[i].name); //, serverlist[i].ip, &serverlist[i].port);
+			
+			char *n = calloc(20, sizeof(char));
+			char *a = calloc(16, sizeof(char));
+	
+			fscanf(muconf, "%s %s %d", n, a, &serverlist[i].port);
+			
+			serverlist[i].name = n;
+			serverlist[i].ip = a;
 		}
 	}
-	
 	fclose(muconf);
 
 	WINDOW *serverwin = derwin(master, 20, 50, LINES/3, COLS/2-50/2);
@@ -1057,7 +1063,8 @@ void serverlist_menu(){
 
 					server_t *new_servers = calloc(numservers, sizeof(server_t));
 					for(int i = 0; i < numservers-1; i++) new_servers[i] = serverlist[i];
-					//free(serverlist);
+					if (numservers > 0) free(serverlist);
+					
 					serverlist = new_servers;
 					serverlist[numservers-1].name = server->name;
 					serverlist[numservers-1].ip = server->ip;
