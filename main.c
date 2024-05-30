@@ -1134,9 +1134,20 @@ void serverlist_menu(){
 				}
 			}
 			if (dash_cursor == 2){
-			
 				
-			
+				numservers--;
+				server_t *new_servers = calloc(numservers, sizeof(server_t));
+				muconf = fopen("multiuser.conf", "w");
+				fprintf(muconf, "%s\n%d\n", username, numservers);
+				for (int i = 0; i < numservers+1; i++) 
+					if (i != serv_cursor){
+						fprintf(muconf, "%s %s %d\n", serverlist[i].name, serverlist[i].ip, serverlist[i].port);
+						if (i < serv_cursor) new_servers[i] = serverlist[i];
+						else new_servers[i-1] = serverlist[i];
+					}
+				fclose(muconf);
+				free(serverlist);
+				serverlist = new_servers;		
 			}
 			if (dash_cursor == 1){
 				
