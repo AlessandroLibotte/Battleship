@@ -792,7 +792,19 @@ void mpc_menu(WINDOW *win){
 	} while (key != 27);	
 }
 
-server_t *add_server(WINDOW *serverwin){
+char *str_ce(char *buff, char *src){
+
+		char *c = src;
+		int k = 0;	
+		do{
+			*(buff+k) = *c;
+			k++;
+		} while (*++c != 0);
+		return buff+k;
+
+}
+
+server_t *add_server(WINDOW *serverwin, server_t *server){
 	
 	WINDOW *win = derwin(serverwin, 9, 48, 4, 1);
 	keypad(win, true);
@@ -808,16 +820,34 @@ server_t *add_server(WINDOW *serverwin){
 	mvwprintw(win, 4, 3, "Server ip: ");
 	mvwprintw(win, 6, 3, "Server port: ");
 
-	server_t *server = NULL;
 
 	int key;
-	
+
 	char *n = calloc(20, sizeof(char));
 	char *a = calloc(16, sizeof(char));
         char *p = calloc(6,  sizeof(char));
-	char *cn = n;
-	char *ca = a;
-	char *cp = p;
+	
+	char *cn, *ca, *cp;
+
+	if (server == NULL){
+		cn = n;
+		ca = a;
+		cp = p;
+	} else {
+		
+		cn = str_ce(n, server->name);
+		ca = str_ce(a, server->ip);
+		
+		sprintf(p, "%d", server->port);
+		cp = p;
+		while (*++cp != 0);
+		
+		mvwprintw(win, 2, 16, "%s", n);
+		mvwprintw(win, 4, 14, "%s", a);
+		mvwprintw(win, 6, 16, "%s", p);
+		
+		wrefresh(win);
+	}
 
 	int field = 1;
 	
@@ -942,7 +972,7 @@ char *get_username(){
 			un = NULL;
 			break;
 		}
-		if (((key >= 'a' && key <= 'z') || (key >= 'A' && key <= 'Z') || (key >= '0' && key <= '9') || key == ' ') && (c-un) < 20){	
+		if (((key >= 'a' && key <= 'z') || (key >= 'A' && key <= 'Z') || (key >= '0' && key <= '9')) && (c-un) < 20){	
 			wprintw(win, "%c", (char)key);
 			*c = (char)key;
 			c++;
@@ -962,42 +992,70 @@ char *get_username(){
 
 }
 
-void serverlist_menu(){
-	
-	char *username;
-	FILE* muconf = fopen("multiuser.conf", "r");
+char *check_username(FILE *conf){
 
-	if (muconf == NULL){ // File didnt exist
-		username = get_username();
-		if (username == NULL) {
-			return;
+	char *un;
+
+	if (conf == NULL){ // File didnt exist
+		un = get_username();
+		if (un == NULL) { // User exited 
+			return un;
 		}
-		muconf = fopen("multiuser.conf", "w+");
-		fprintf(muconf, "%s 0 ", username); 
-	} else {
-		username = calloc(20, sizeof(char));
-		fscanf(muconf, "%s", username);
+		// Creating config file
+		conf = fopen("multiuser.conf", "w+");
+		fprintf(conf, "%s 0 ", un);
+	} else { // File exists
+		un = calloc(20, sizeof(char));
+		fscanf(conf, "%s", un);
+	}
+	
+	fclose(conf);
+
+	return un;
+}
+
+server_t *get_servers(FILE* conf, int ns){
+		
+	// Allocate space for the list of server structs
+	server_t *sl = calloc(ns, sizeof(server_t));
+	for (int i = 0; i < ns; i++){
+		
+		// Allocat space for the server struct entrys
+		char *n = calloc(20, sizeof(char));
+		char *a = calloc(16, sizeof(char));
+		
+		// Get data from file
+		fscanf(conf, "%s %s %d", n, a, &sl[i].port);
+		
+		// Populate corresponding server struct
+		sl[i].name = n;
+		sl[i].ip = a;
 	}
 
-	//if there are servers saved in the config file get them 
+	return sl;
+
+}
+
+void serverlist_menu(){
+	
+	
+	FILE *muconf = fopen("multiuser.conf", "r");
+
+	char *username = check_username(muconf);
+	if (username == NULL) return;
+	
+	muconf = fopen("multiuser.conf", "r");
+
+	// Get the number of server from the config file 
 	int numservers = 0;
 	fseek(muconf, strlen(username), SEEK_SET);
 	fscanf(muconf, "%d", &numservers);
-	server_t *serverlist;
-	if (numservers > 0){
-		serverlist = calloc(numservers, sizeof(server_t));
-		for (int i = 0; i < numservers; i++){
-			
-			char *n = calloc(20, sizeof(char));
-			char *a = calloc(16, sizeof(char));
-	
-			fscanf(muconf, "%s %s %d", n, a, &serverlist[i].port);
-			
-			serverlist[i].name = n;
-			serverlist[i].ip = a;
-		}
-	}
+
+	// If there are servers saved in the config file get them 
+	server_t *serverlist = numservers > 0 ? get_servers(muconf, numservers) : NULL;
+
 	fclose(muconf);
+	
 
 	WINDOW *serverwin = derwin(master, 20, 50, LINES/3, COLS/2-50/2);
 	WINDOW *serverdash = derwin(serverwin, 3, 48, 16, 1); 
@@ -1023,9 +1081,6 @@ void serverlist_menu(){
 		werase(serverdash);
 		box(serverdash, 0, 0);
 		
-		wrefresh(serverdash);
-		wrefresh(serverwin);
-
 		for(int i = 0; i < numservers; i++){
 			if (i == serv_cursor) wattron(serverwin, A_REVERSE);
 			mvwprintw(serverwin, 2+i, 3, "%s", serverlist[i].name);
@@ -1050,15 +1105,18 @@ void serverlist_menu(){
 
 		if (key == 10){
 			if(dash_cursor == 2){
-				server_t *server = add_server(serverwin);
+				server_t *server = add_server(serverwin, (server_t *)NULL);
 				if (server != NULL){
 
-					numservers++;
 					muconf = fopen("multiuser.conf", "r+");
+					
+					numservers++;
 					fseek(muconf, strlen(username)+1, SEEK_SET);
 					fprintf(muconf, "%d", numservers);
+					
 					fseek(muconf, 0, SEEK_END);
 					fprintf(muconf, "%s %s %d ", server->name, server->ip, server->port);	
+					
 					fclose(muconf);
 
 					server_t *new_servers = calloc(numservers, sizeof(server_t));
@@ -1070,35 +1128,42 @@ void serverlist_menu(){
 					serverlist[numservers-1].ip = server->ip;
 					serverlist[numservers-1].port = server->port;
 					
-					
-					/*
-					numservers++;
-					
-					muconf = fopen("multiuser.conf", "w");
-					fprintf(muconf, "%s\n%d\n", username, numservers);
-
-					server_t *new_servers = calloc(numservers, sizeof(server_t));
-					
-					for(int i = 0; i < numservers-1; i++){
-						new_servers[i] = serverlist[i];
-						fprintf(muconf, "%s %s %d\n", serverlist[i].name, serverlist[i].ip, serverlist[i].port);
-					}
-					//free(serverlist);
-					serverlist = new_servers;
-					serverlist[numservers-1].name = server->name;
-					serverlist[numservers-1].ip = server->ip;
-					serverlist[numservers-1].port = server->port;
-
-					fprintf(muconf, "%s %s %d\n", serverlist[numservers-1].name, serverlist[numservers-1].ip, serverlist[numservers-1].port);
-
-					fclose(muconf);
-					*/
 				}
+			}
+			if (dash_cursor == 1){
+				
+				server_t *server = add_server(serverwin, &serverlist[serv_cursor]);
+
+				muconf = fopen("multiuser.conf", "r+");
+				fscanf(muconf, "%*s %*d");	
+
+				server_t *new_servers = calloc(numservers, sizeof(server_t));
+				for(int i = 0; i < numservers; i++) {
+					if (i == serv_cursor) {
+						new_servers[i].name = server->name;
+						new_servers[i].ip = server->ip;
+						new_servers[i].port = server->port;
+						fprintf(muconf, " %s %s %d", server->name, server->ip, server->port); 
+					} else {
+						new_servers[i] = serverlist[i];
+						fscanf(muconf, "%*s %*s %*d");
+					}
+				}
+				fclose(muconf);
+				free(serverlist);
+				serverlist = new_servers;
 			}
 		}
 
 	}while(key != 27);
 	
+	// Free allocated memory
+	for(int i = 0; i < numservers; i++){
+		free(serverlist[i].name);
+		free(serverlist[i].ip);
+	}
+	if (numservers > 0) free(serverlist);
+
 	keypad(serverwin, false);
 	werase(serverdash);
 	werase(serverwin);
