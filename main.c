@@ -490,7 +490,7 @@ void getparse_msg(game_win *gamewin){
                 		gamewin->player_map[cds(y,x)] = 7; // Set player map to hit marker
 				n = write(CLIENT, "HIT", 3); // Send back hit message
 			} else {
-				// If the re isn't a player ship
+				// If there isn't a player ship
                 		gamewin->player_map[cds(y,x)] = 8; // Set player map to miss marker
 				n = write(CLIENT, "MISS", 4); // Send back miss message
 			}
