@@ -1,19 +1,25 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <curses.h>
 #include <locale.h>
 #include <time.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <unistd.h>
-#include <string.h>
 #include <netdb.h>
-#include <pthread.h>
+
 
 #define cds(y, x)((10*(y))+x)
 
 WINDOW *master;
+
 typedef struct game_win{
     	WINDOW *win;
     	WINDOW *radiolog;
@@ -31,14 +37,17 @@ typedef struct server_t {
 	int port;
 } server_t;
 
-bool CONNECTED = false;
-bool READY = false;
-bool ERROR = false;
+#define MSG_SIZE 4
+
+typedef struct msg {
+	long type;
+	char text[MSG_SIZE];
+} msg;
+
 int CLIENT, SERVER;
 char *ADDRESS;
 int PORT;
-bool turn = true;
-int mx, my, line = 1;
+//bool turn = true;
 
 void init_curses(){
 	setlocale(LC_ALL, "");
@@ -221,7 +230,7 @@ void position_fleet(game_win *gamewin, bool mp){
 			}
 			if (placed) rem_ships--;
 		}
-		if (key == 27 || (!CONNECTED && mp)){
+		if (key == 27){
 			*gamewin->player_map = 10;
 			break;
 		}
@@ -286,15 +295,23 @@ char *setup_enemy(){
 	return map;
 }
 
-void game_loop(game_win *gamewin, bool mp){
+void game_loop(game_win *gamewin,bool turn, bool mp, int des){
 
     	position_fleet(gamewin, mp);
 
+	msg m;
+	
 	if(*gamewin->player_map != 10){
 
 		if (mp) {
-			write(CLIENT,"READY", 6);
-			while(!READY) sleep(1);
+
+			write(CLIENT,"RDY", MSG_SIZE);
+			while(1){
+				if (msgrcv(des, &m, MSG_SIZE, 1, IPC_NOWAIT) != -1)
+					if (strcmp(m.text, "RDY") == 0) break;
+				sleep(1);
+			}
+
             		gamewin->enemy_map = calloc(100, sizeof(char));
 			wtimeout(gamewin->enemyfield, 5);
 		}
@@ -303,7 +320,9 @@ void game_loop(game_win *gamewin, bool mp){
 		int x = 0;
 		int y = 0;
 		int key;
-	
+		
+		bool connected = true;
+		
 		keypad(gamewin->enemyfield, true);
 		do{
 			if (turn){
@@ -328,10 +347,11 @@ void game_loop(game_win *gamewin, bool mp){
 				if (key == KEY_RIGHT) x++;
 				if (key == 10){
 					if (mp){
-						char msg[4] = {'F', '0'+y, '0'+x, '\0'};
-						mx = x;
-						my = y;
-						write(CLIENT,(char*)msg, 4);
+						char smsg[MSG_SIZE] = {'F', '0'+y, '0'+x, '\0'};
+						m.type = 2;
+						sprintf(m.text, smsg);
+						msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
+						write(CLIENT,(char*)smsg, MSG_SIZE);
 					} else {
 						if(gamewin->enemy_map[cds(y,x)] != 0 && gamewin->enemy_map[cds(y,x)] != 8){
 							gamewin->enemy_map[cds(y,x)] = 7;
@@ -345,8 +365,15 @@ void game_loop(game_win *gamewin, bool mp){
 				wrefresh(gamewin->enemyfield);
 			} else {
 				if (mp){
-					while(!turn && CONNECTED && key != 27) {
+					while(!turn && connected && key != 27) {
+
 						key = wgetch(gamewin->enemyfield);
+						
+						if (msgrcv(des, &m, MSG_SIZE, 3, IPC_NOWAIT) != -1){
+							if (strcmp(m.text, "DIS") == 0) connected = false;
+							if (strcmp(m.text, "TUR") == 0) turn = true;
+						}
+						
 						sleep(1);
 					}
 				} else {
@@ -368,7 +395,12 @@ void game_loop(game_win *gamewin, bool mp){
 				}
 			}
 	
-			if(mp && !CONNECTED) break;
+			if(mp){ 
+				if (!connected) break;
+				if (msgrcv(des, &m, MSG_SIZE, 3, IPC_NOWAIT) != -1)
+					if(strcmp(m.text, "DIS") == 0) break;
+			}
+
 		}while(key != 27);
 		
 		keypad(gamewin->enemyfield, false);
@@ -376,9 +408,11 @@ void game_loop(game_win *gamewin, bool mp){
 		free(gamewin->enemy_map);
 	}
 	if(mp){
-		write(CLIENT, "DISC", 4);
+		write(CLIENT, "DIS", MSG_SIZE);
+		m.type = 4;
+		sprintf(m.text, "DIS");
+		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
 		wtimeout(gamewin->enemyfield, -1);
-		CONNECTED = false;
 	}
 	free(gamewin->player_map);
 
@@ -432,24 +466,25 @@ void error(const char *msg){
 	refresh();
 }
 
-void getparse_msg(game_win *gamewin){
+void getparse_msg(int des, game_win* gamewin){
 
 	int n;
-	char *buffer;	
+	int line = 1;		
+	char buffer[MSG_SIZE];	
+	bool connected = true;
+	msg m;
 
-	while(CONNECTED){	
+	while(connected){	
 	
-		buffer = calloc(256, sizeof(char));
-		
 		// Read form socket
-		n = read(CLIENT,buffer,255);
+		n = read(CLIENT, buffer, MSG_SIZE);
 		if (n < 0) {
 			error("ERROR reading from socket");
 			pthread_exit((void *)-1);
 		}
 
 		// Print to screen log
-		if (CONNECTED){			
+		if (connected){
 			int rly, rlx;
 			getyx(gamewin->radiolog, rly, rlx);
 			if (rlx > 127-n){
@@ -457,24 +492,43 @@ void getparse_msg(game_win *gamewin){
 			       	wmove(gamewin->radiolog, line, 3);
 				wrefresh(gamewin->radiolog);
 			}
+			if (rly > 6) line = 0;
 			wprintw(gamewin->radiolog, "%s ", buffer);
 			wrefresh(gamewin->radiolog);
 		}
+
+		if(msgrcv(des, &m, MSG_SIZE, 4, IPC_NOWAIT) != -1)
+			if (strcmp(m.text, "DIS")) {
+				connected = false;
+				return;
+			}
 	
 		// Parse message and act on it 
-		if (strcmp(buffer, "READY") == 0){
-			READY = true; // Set ready flag
+		if (strcmp(buffer, "RDY") == 0){
+			m.type = 1;
+			sprintf(m.text, "RDY");
+			msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
 		}
 		if (strcmp(buffer, "HIT") == 0){
-            		gamewin->enemy_map[cds(my, mx)] = 7; // Set enemy map to hit marker
+
+			msgrcv(des, &m, MSG_SIZE, 2, 0);
+			int y = m.text[1]-'0';
+			int x = m.text[2]-'0';
+
+            		gamewin->enemy_map[cds(y, x)] = 7; // Set enemy map to hit marker
 			// Redraw enemy field
 			werase(gamewin->enemyfield);
 			print_field(gamewin->enemyfield, gamewin->win, 2, 93, " Enemy BattleField ");
 			draw_map(gamewin->enemyfield, gamewin->enemy_map, false);
 			wrefresh(gamewin->enemyfield);
 		}
-		if (strcmp(buffer, "MISS") == 0){
-            		gamewin->enemy_map[cds(my, mx)] = 8; // Set enemy map to miss marker
+		if (strcmp(buffer, "MIS") == 0){
+
+			msgrcv(des, &m, MSG_SIZE, 2, 0);
+			int y = m.text[1]-'0';
+			int x = m.text[2]-'0';
+
+            		gamewin->enemy_map[cds(y, x)] = 8; // Set enemy map to miss marker
 			// Redraw enemy field
 			werase(gamewin->enemyfield);
 			print_field(gamewin->enemyfield, gamewin->win, 2, 93, " Enemy BattleField ");
@@ -486,13 +540,13 @@ void getparse_msg(game_win *gamewin){
 			int y = buffer[1]-'0';
 			int x = buffer[2]-'0';
 			if (gamewin->player_map[cds(y,x)] != 0 && gamewin->player_map[cds(y,x)] != 8){
-				// If there is a player ship
+				// If there is a player ship that wasn't  hit yet
                 		gamewin->player_map[cds(y,x)] = 7; // Set player map to hit marker
-				n = write(CLIENT, "HIT", 3); // Send back hit message
+				n = write(CLIENT, "HIT", MSG_SIZE); // Send back hit message
 			} else {
 				// If there isn't a player ship
                 		gamewin->player_map[cds(y,x)] = 8; // Set player map to miss marker
-				n = write(CLIENT, "MISS", 4); // Send back miss message
+				n = write(CLIENT, "MIS", MSG_SIZE); // Send back miss message
 			}
 			// Redraw player field
 			werase(gamewin->playerfield);
@@ -500,23 +554,43 @@ void getparse_msg(game_win *gamewin){
 			draw_map(gamewin->playerfield, gamewin->player_map, true);
 			wrefresh(gamewin->playerfield);
 			// Change turn
-			turn = true;
+			m.type = 3;
+			sprintf(m.text, "TUR");
+			msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
 		}
-		if (strcmp(buffer, "DISC") == 0){ // Enemy disconnected
-			CONNECTED = false;
+		if (strcmp(buffer, "DIS") == 0){ // Enemy disconnected
+			
+			connected = false;
+
+			m.type = 3;
+			sprintf(m.text, "DIS");
+			msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
+
+
 			return;
 		}
 
-		free(buffer);
 	}
 }
 
-void *init_host(void *gamewin){
+typedef struct t_targ{
+	int des;
+	game_win *gamewin;
+} t_targ;
+
+void *init_host(void *targ){
 	
 	// Set thread cancel type to asynchronus to allow for instant cancelation on cancel signal reception 
 	int oldt;	
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldt);	
 	
+	int des = ((t_targ *)targ)->des;
+	game_win *gamewin = ((t_targ *)targ)->gamewin;
+	
+	msg m;
+	m.type = 1;
+	sprintf(m.text, "ERR");
+
 	// Allocate space for socket server variables and structs
 	socklen_t clilen;
 	struct sockaddr_in serv_addr, cli_addr;
@@ -525,8 +599,8 @@ void *init_host(void *gamewin){
 	SERVER = socket(AF_INET, SOCK_STREAM, 0);
 	if (SERVER < 0) {
 		error("ERROR opening socket");
-        	ERROR = true;
-		pthread_exit((void *)-1);
+		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
+		pthread_exit(NULL);
 	}
 	
 	// Populate socket server structs
@@ -538,9 +612,9 @@ void *init_host(void *gamewin){
 	// Bind socket address to server 
 	if (bind(SERVER, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
 		error("ERROR on binding");
-        	ERROR = true;
+		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
         	close(SERVER);
-		pthread_exit((void *)-1);
+		pthread_exit(NULL);
 	}
 	
 	// Listen for client connection and accept connection
@@ -550,26 +624,34 @@ void *init_host(void *gamewin){
 
 	if (CLIENT < 0){
         	error("ERROR on accept");
-        	ERROR = true;
-		pthread_exit((void *)-1);
+		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
+		pthread_exit(NULL);
 	}
 	
-	CONNECTED = true;
+	sprintf(m.text, "CON");
+	msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
 	
 	// Start parseing message
-	getparse_msg((game_win*)gamewin);
+	getparse_msg(des, gamewin);
 
 	close(SERVER);
 	close(CLIENT);
 
-	pthread_exit((void *)1);
+	pthread_exit(NULL);
 }
 
-void *init_client(void *gamewin){
-	
+void *init_client(void *targ){
+
 	// Set thread cancel type to asynchronus to allow for instant cancelation on cancel signal reception 
 	int oldt;	
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldt);	
+
+	int des = ((t_targ *)targ)->des;
+	game_win *gamewin = ((t_targ *)targ)->gamewin;
+
+	msg m;
+	m.type = 1;
+	sprintf(m.text, "ERR");
 
 	// Allocate space for socket client structs
 	struct sockaddr_in serv_addr;
@@ -580,9 +662,9 @@ void *init_client(void *gamewin){
 	server = gethostbyname(ADDRESS);
 
 	if (server == NULL) {
-		error("ERROR, no such host");
-        	ERROR = true;
-		pthread_exit((void *)1);
+		error("ERROR, no such host");		
+		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
+		pthread_exit(NULL);
 	}
 	
 	// Populate socket client structs
@@ -594,19 +676,20 @@ void *init_client(void *gamewin){
 	// Connect to host
 	if (connect(CLIENT,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) {
 		error("ERROR connecting");
-        	ERROR = true;
+		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
         	close(CLIENT);
-		pthread_exit((void *)1);
+		pthread_exit(NULL);
 	}
 	
-	CONNECTED = true;
+	sprintf(m.text, "CON");
+	msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
 
 	// Start parseing messages
-	getparse_msg((game_win*)gamewin);
+	getparse_msg(des, gamewin);
 
 	close(CLIENT);
 	
-	pthread_exit((void *)1);
+	pthread_exit(NULL);
 } 
 
 void multiplayer(bool mode){
@@ -614,27 +697,51 @@ void multiplayer(bool mode){
 	/* bool mode: Flag true for client, false for host */
 
 	// Set ERROR flag and create game window
-    	ERROR = false;
     	game_win *gamewin = create_gamewin();
+	
+	srand(time(NULL));
+
+	// Get message queue
+	int des;
+	long key;
+       	do{	
+		key = (rand() % (50-10)) + 10;
+		des = msgget(key, IPC_CREAT|IPC_EXCL|0666);
+	}while(des == -1);
+
+	t_targ *targ = calloc(1, sizeof(t_targ));
+	targ->des = des;
+	targ->gamewin = gamewin;
 
 	// Create socket thread
 	pthread_t tid;
-	pthread_create(&tid, NULL, mode ? init_client : init_host, (void *)gamewin);
+	pthread_create(&tid, NULL, mode ? init_client : init_host, targ);
 	
 	// Print to screen log
 	wmove(gamewin->radiolog, 1, 3);
 	wprintw(gamewin->radiolog, mode ? "Connecting to host... " : "Waiting for player... ");
 	wrefresh(gamewin->radiolog);
+	
+	bool connected = false;
+	bool error = false;
+	msg m;
 
 	// Wait for connection to host, error or exit signal
 	wtimeout(gamewin->enemyfield, 5);
-	while(!CONNECTED && !ERROR){
+	while(!connected && !error){
+
+		if (msgrcv(des, &m, MSG_SIZE, 1, IPC_NOWAIT) != -1){
+			if (strcmp(m.text, "CON") == 0) connected = true;
+			if (strcmp(m.text, "ERR") == 0) error = true;
+		}
+
 		int key = wgetch(gamewin->enemyfield);
 		if (key == 27){ // if ESC is pressed, exit
 			wtimeout(gamewin->enemyfield, -1);
 			close_gamewin(gamewin);
 			if(mode) close(CLIENT);
 			else close(SERVER);
+			msgctl(des, IPC_RMID, NULL);
 			pthread_cancel(tid);
 			return;
 		}
@@ -643,13 +750,17 @@ void multiplayer(bool mode){
     	wtimeout(gamewin->enemyfield, -1);
 	
 	// Connection successful
-	if (!ERROR) {
+	if (!error) {
         	wprintw(gamewin->radiolog, mode ? "Connected to host. " : "Player connected. ");
         	wrefresh(gamewin->radiolog);
 		// Start game
-        	if(mode) turn = false;
-        	game_loop(gamewin, true);
+        	if(mode) game_loop(gamewin, false, true, des);
+		else game_loop(gamewin, true, true, des);
     	}
+	
+	pthread_cancel(tid);
+
+	msgctl(des, IPC_RMID, NULL);
 	close_gamewin(gamewin);
 }
 
@@ -792,15 +903,23 @@ void mpc_menu(WINDOW *win){
 	} while (key != 27);	
 }
 
-char *str_ce(char *buff, char *src){
+char *str_ce(char *dest, char *src){
 
-		char *c = src;
-		int k = 0;	
-		do{
-			*(buff+k) = *c;
-			k++;
-		} while (*++c != 0);
-		return buff+k;
+	/* Utility function: String copy end */
+		
+	// Copy a 0 terminated string from the 
+	// buffer src to the buffer dest not 
+	// incrementing the dest pointer directly
+	// and returning a pointer to the end of 
+	// the string 
+
+	char *c = src;
+	int k = 0;	
+	do{
+		*(dest+k) = *c;
+		k++;
+	} while (*++c != 0);
+	return dest+k;
 
 }
 
@@ -1225,7 +1344,7 @@ void main_menu(){
 				game_win *gamewin = create_gamewin();
 				wmove(gamewin->radiolog, 1, 3);
 				wrefresh(gamewin->radiolog);
-				game_loop(gamewin, false);
+				game_loop(gamewin, true, false, -1);
 				close_gamewin(gamewin);
 				break;
 			case 1: // 1v1 Classic host submenu
