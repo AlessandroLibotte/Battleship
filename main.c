@@ -157,9 +157,11 @@ void draw_map(WINDOW *field, char *map, bool mode){
 	}
 }
 
-void position_fleet(game_win *gamewin, bool mp){
+void position_fleet(game_win *gamewin, bool mp, int des){
 
 	keypad(gamewin->playerfield, true);
+
+	msg m;
 
 	int rem_ships = 4;
 	gamewin->player_map = calloc(100, sizeof(char));
@@ -234,6 +236,12 @@ void position_fleet(game_win *gamewin, bool mp){
 			*gamewin->player_map = 10;
 			break;
 		}
+		if (msgrcv(des, &m, MSG_SIZE, 3, IPC_NOWAIT) != -1){
+			if (strcmp(m.text, "DIS") == 0){
+				*gamewin->player_map = 10;
+				break;
+			}	
+		}
 	} while(rem_ships >= 0);
 	
 	wtimeout(gamewin->playerfield, -1);
@@ -297,7 +305,7 @@ char *setup_enemy(){
 
 void game_loop(game_win *gamewin,bool turn, bool mp, int des){
 
-    	position_fleet(gamewin, mp);
+    	position_fleet(gamewin, mp, des);
 
 	msg m;
 	
