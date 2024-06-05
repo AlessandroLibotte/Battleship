@@ -45,9 +45,13 @@ typedef struct msg {
 } msg;
 
 int CLIENT, SERVER;
-char *ADDRESS;
-int PORT;
-//bool turn = true;
+
+typedef struct t_targ{
+	int des;
+	game_win *gamewin;
+	char *addr;
+	int port;
+} t_targ;
 
 void init_curses(){
 	setlocale(LC_ALL, "");
@@ -581,11 +585,6 @@ void getparse_msg(int des, game_win* gamewin){
 	}
 }
 
-typedef struct t_targ{
-	int des;
-	game_win *gamewin;
-} t_targ;
-
 void *init_host(void *targ){
 	
 	// Set thread cancel type to asynchronus to allow for instant cancelation on cancel signal reception 
@@ -615,7 +614,7 @@ void *init_host(void *targ){
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
-	serv_addr.sin_port = htons(PORT);
+	serv_addr.sin_port = htons(((t_targ *)targ)->port);
 
 	// Bind socket address to server 
 	if (bind(SERVER, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
@@ -667,7 +666,7 @@ void *init_client(void *targ){
 	
 	// Open socket and get host
 	CLIENT = socket(AF_INET, SOCK_STREAM, 0);
-	server = gethostbyname(ADDRESS);
+	server = gethostbyname(((t_targ *)targ)->addr);
 
 	if (server == NULL) {
 		error("ERROR, no such host");		
@@ -679,7 +678,7 @@ void *init_client(void *targ){
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
 	bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
-	serv_addr.sin_port = htons(PORT);
+	serv_addr.sin_port = htons(((t_targ *)targ)->port);
 	
 	// Connect to host
 	if (connect(CLIENT,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) {
@@ -700,7 +699,7 @@ void *init_client(void *targ){
 	pthread_exit(NULL);
 } 
 
-void multiplayer(bool mode){
+void multiplayer(bool mode, char *addr, int port){
 	
 	/* bool mode: Flag true for client, false for host */
 
@@ -720,6 +719,8 @@ void multiplayer(bool mode){
 	t_targ *targ = calloc(1, sizeof(t_targ));
 	targ->des = des;
 	targ->gamewin = gamewin;
+	targ->addr = addr;
+	targ->port = port;
 
 	// Create socket thread
 	pthread_t tid;
@@ -835,9 +836,8 @@ void mph_menu(WINDOW *win){
 			}
 		} else if (key == 10){ // Enter
 			curs_set(0);
-			PORT= atoi(p);
             		werase(win);
-			multiplayer(false);
+			multiplayer(false, NULL, atoi(p));
 			break;
 		} else if (key >= '0' && key <= '9' && c-p < 6) { // Handle digits
 			wprintw(win, "%c", (char)key);
@@ -896,10 +896,8 @@ void mpc_menu(WINDOW *win){
 			wmove(win, y+2, 14+(c-p));
 		} else if (key == 10){ // Enter
 			curs_set(0);
-			ADDRESS = a;
-			PORT = atoi(p);
            		werase(win);
-			multiplayer(true);
+			multiplayer(true, a, atoi(p));
 			break;
 		} else if ((key >= '0' && key <= '9') || key == '.'){ // Handle digits and periods
 			if(field && c-p < 6){
