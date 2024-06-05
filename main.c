@@ -811,8 +811,9 @@ void mph_menu(WINDOW *win){
 	// Print menu entrys
 	werase(win);
 	box(win, 0, 0);	
-	mvwprintw(win, 0, 3, " Multi Player ");
+	mvwprintw(win, 0, 3, " Multi Player Host ");
 	mvwprintw(win, 4, 6, "- Port: ");
+	mvwprintw(win, 9, 24, " Host:[ENTER] Back:[ESC] ");
 	wrefresh(win);
 
 	// Allocate space for port string
@@ -820,6 +821,7 @@ void mph_menu(WINDOW *win){
 	char *c = p;
 
 	int key;
+	wmove(win, 4, 14);
 	do{
 		key = wgetch(win);
 		if (key == 263){ // Backspace
@@ -837,7 +839,7 @@ void mph_menu(WINDOW *win){
             		werase(win);
 			multiplayer(false);
 			break;
-		} else if (key >= '0' && key <= '9') { // Handle digits
+		} else if (key >= '0' && key <= '9' && c-p < 6) { // Handle digits
 			wprintw(win, "%c", (char)key);
 			*c = (char)key;
 			c++;
@@ -850,15 +852,16 @@ void mpc_menu(WINDOW *win){
 	// Print menu entrys
 	werase(win);
 	box(win, 0, 0);	
-	mvwprintw(win, 0, 3, " Multi Player ");
+	mvwprintw(win, 0, 3, " Multi Player Connect ");
 	mvwprintw(win, 3, 6, "- Address:");
 	mvwprintw(win, 5, 6, "- Port:");
+	mvwprintw(win, 9, 21, " Connect:[ENTER] Back:[ESC] ");
 	wrefresh(win);
 
 	// Allocate space for IP and port strings
-	char *p = calloc(16, sizeof(char));
+	char *p = calloc(6, sizeof(char));
 	char *c = p;
-	char *a = calloc(6, sizeof(char));
+	char *a = calloc(16, sizeof(char));
 	char *d = a;
 
 	//Initialize variables and window curosr
@@ -866,7 +869,7 @@ void mpc_menu(WINDOW *win){
 	bool field = false;
 	int y, x;
 	getyx(win, y, x);
-	wmove(win, y-2, 17);
+	wmove(win, y-6, 17);
 
 	do{
 		key = wgetch(win);
@@ -899,11 +902,12 @@ void mpc_menu(WINDOW *win){
 			multiplayer(true);
 			break;
 		} else if ((key >= '0' && key <= '9') || key == '.'){ // Handle digits and periods
-			wprintw(win, "%c", (char)key);
-			if(field){
+			if(field && c-p < 6){
+				wprintw(win, "%c", (char)key);
 				*c = (char)key;
 				c++;
-			} else {
+			} else if (!field && d-a < 16){
+				wprintw(win, "%c", (char)key);
 				*d = (char)key;
 				d++;
 			}
@@ -1207,6 +1211,8 @@ void serverlist_menu(){
 		werase(serverwin);
 		box(serverwin, 0, 0);
 		mvwprintw(serverwin, 0, 3, " %s's Servers (%d) ", username, numservers);
+		
+		mvwprintw(serverwin, 19, 2, " Scroll:[ARROW KEYS] Select:[ENTER] Back:[ESC] ");
 
 		werase(serverdash);
 		box(serverdash, 0, 0);
