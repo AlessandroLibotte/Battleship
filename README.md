@@ -117,10 +117,16 @@ Most of the multiplayer capabilities of the application are handled by four func
 
 When either joining or hosting an online match, the ```multiplayer()``` function is called with the boolean argument ```mode``` signaling wich of the two actions the user wishes to take. The  ```multiplayer()``` function is responsible for the installation of the inter process message queue and the creation of a thread that will handle the socket communication. To do so, fisrts the ```game_win``` object is created, the inter process message queue is exclusively installed and depending on the ```mode``` argument value a thread is created with the ```init_client()``` or ```init_host()``` function as the target. After that the main thread enters an infinite loop waiting for the press of the ESC to abort or the reception of either the "CON" or "ERR" message. On reception of the "CON" message the ```game_loop()``` function is called and the main thread procedes as described in the **Online matches** subsection of the **Game loop** paragraph. If instead the ESC key is pressed or the "ERR" message is recived the main thread will terminate the other thread, close the socket connection and return the user to the main menu.
 
-In the meantime, while the main thread is waiting for the "CON" message on the inter process message queue, the other thread will setup the socket connection, either server or client depending on whitch function is set as target for the thread, and will then wait for a connection or attempt to connect to the host provided by the user. If at any point of this procedure one of the system calls fails, the "ERR" message will be sent on the inter process message queue and the thread will terminate after closing the socket connection if it has been opened. Otherwise if a connection is succesfully established, while the main thread enteres the ```game_loop()``` function, the ```getparse_msg()``` function is called by the thread.
+In the meantime, while the main thread is waiting for the "CON" message on the inter process message queue, the other thread will setup the socket connection, either server or client depending on whitch function is set as target for the thread, and will then wait for a connection or attempt to connect to the host provided by the user. If at any point of this procedures one of the system calls fails, the "ERR" message will be sent on the inter process message queue and the thread will terminate after closing the socket connection if it has been opened. Otherwise if a connection is succesfully established, while the main thread enteres the ```game_loop()``` function, the ```getparse_msg()``` function is called by the thread in both the hosting or joining cases.
 
-The ```getparse_msg()``` function, as the name implies, is responsible for the reception and parsing of the messages recived on the socket. To achieve this, the thread enters a loop that will be repeated untill one of the user disconnects. 
+The ```getparse_msg()``` function, as the name implies, is responsible for the reception and parsing of the messages recived on the socket. To achieve this, the thread enters a loop that will be repeated untill one of the user disconnects. Inside this loop the thread will wait for a message on the socket to then parse it and take the corresponding actions. 
 
-Inside this loop the thread will 
+The following are the messages handled by this function:
+
+- RDY: Signaling the readyness of the 
+- HIT
+- MIS
+- F[x][y]
+- DIS
 
 
