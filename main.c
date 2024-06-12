@@ -33,7 +33,7 @@ typedef struct game_win{
 
 typedef struct server_t {
 	char *name;
-	char *ip;
+	char *addr;
 	int port;
 } server_t;
 
@@ -255,7 +255,6 @@ void position_fleet(game_win *gamewin, bool mp, int des){
 	print_field(gamewin->playerfield, gamewin->win, 2, 4, " Your Battlefield ");
 	draw_map(gamewin->playerfield, gamewin->player_map, true);
 	wrefresh(gamewin->playerfield);
-
 }
 
 char *setup_enemy(){
@@ -427,7 +426,6 @@ void game_loop(game_win *gamewin,bool turn, bool mp, int des){
 		wtimeout(gamewin->enemyfield, -1);
 	}
 	free(gamewin->player_map);
-
 }
 
 game_win *create_gamewin(){
@@ -607,10 +605,10 @@ void *init_host(void *targ){
 	if (SERVER < 0) {
 		error("ERROR opening socket");
 		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
-		pthread_exit(NULL);
+		return NULL;
 	}
 	
-	// Populate socket server structs
+	// Clear and populate socket address structs
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -621,19 +619,21 @@ void *init_host(void *targ){
 		error("ERROR on binding");
 		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
         	close(SERVER);
-		pthread_exit(NULL);
+		return NULL;
 	}
 	
 	// Listen for client connection and accept connection
-	listen(SERVER,5);
+	listen(SERVER,1);
 	clilen = sizeof(cli_addr);
 	CLIENT = accept(SERVER, (struct sockaddr *) &cli_addr, &clilen);
 
 	if (CLIENT < 0){
         	error("ERROR on accept");
 		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
-		pthread_exit(NULL);
+		return NULL;
 	}
+	
+	close(SERVER);
 	
 	sprintf(m.text, "CON");
 	msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
@@ -641,10 +641,9 @@ void *init_host(void *targ){
 	// Start parseing message
 	getparse_msg(des, gamewin);
 
-	close(SERVER);
 	close(CLIENT);
-
-	pthread_exit(NULL);
+	
+	return NULL;
 }
 
 void *init_client(void *targ){
@@ -666,12 +665,18 @@ void *init_client(void *targ){
 	
 	// Open socket and get host
 	CLIENT = socket(AF_INET, SOCK_STREAM, 0);
-	server = gethostbyname(((t_targ *)targ)->addr);
+	if (CLIENT < 0) {
+		error("ERROR opening socket");
+		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
+		return NULL;
+	}
 
+	server = gethostbyname(((t_targ *)targ)->addr);
 	if (server == NULL) {
 		error("ERROR, no such host");		
 		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
-		pthread_exit(NULL);
+        	close(CLIENT);
+		return NULL;
 	}
 	
 	// Populate socket client structs
@@ -685,7 +690,7 @@ void *init_client(void *targ){
 		error("ERROR connecting");
 		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
         	close(CLIENT);
-		pthread_exit(NULL);
+		return NULL;
 	}
 	
 	sprintf(m.text, "CON");
@@ -695,8 +700,7 @@ void *init_client(void *targ){
 	getparse_msg(des, gamewin);
 
 	close(CLIENT);
-	
-	pthread_exit(NULL);
+	return NULL;	
 } 
 
 void multiplayer(bool mode, char *addr, int port){
@@ -930,7 +934,6 @@ char *str_ce(char *dest, char *src){
 		k++;
 	} while (*++c != 0);
 	return dest+k;
-
 }
 
 server_t *add_server(WINDOW *serverwin, server_t *server){
@@ -965,7 +968,7 @@ server_t *add_server(WINDOW *serverwin, server_t *server){
 	} else {
 		
 		cn = str_ce(n, server->name);
-		ca = str_ce(a, server->ip);
+		ca = str_ce(a, server->addr);
 		
 		sprintf(p, "%d", server->port);
 		cp = p;
@@ -999,7 +1002,7 @@ server_t *add_server(WINDOW *serverwin, server_t *server){
 				*cp = '\0';
 				server = calloc(1, sizeof(server_t));
 				server->name = n;
-				server->ip = a;
+				server->addr = a;
 				server->port = atoi(p);
 				break;
 			}
@@ -1161,11 +1164,10 @@ server_t *get_servers(FILE* conf, int ns){
 		
 		// Populate corresponding server struct
 		sl[i].name = n;
-		sl[i].ip = a;
+		sl[i].addr = a;
 	}
 
 	return sl;
-
 }
 
 void serverlist_menu(){
@@ -1249,7 +1251,7 @@ void serverlist_menu(){
 					fprintf(muconf, "%d", numservers);
 					
 					fseek(muconf, 0, SEEK_END);
-					fprintf(muconf, "%s %s %d\n", server->name, server->ip, server->port);	
+					fprintf(muconf, "%s %s %d\n", server->name, server->addr, server->port);	
 					
 					fclose(muconf);
 
@@ -1259,12 +1261,14 @@ void serverlist_menu(){
 					
 					serverlist = new_servers;
 					serverlist[numservers-1].name = server->name;
-					serverlist[numservers-1].ip = server->ip;
+					serverlist[numservers-1].addr = server->addr;
 					serverlist[numservers-1].port = server->port;
 					
 				}
 			}
 			if (dash_cursor == 2){
+				
+				if (numservers <= 0) continue;
 				
 				numservers--;
 				server_t *new_servers = calloc(numservers, sizeof(server_t));
@@ -1272,7 +1276,7 @@ void serverlist_menu(){
 				fprintf(muconf, "%s\n%d\n", username, numservers);
 				for (int i = 0; i < numservers+1; i++) 
 					if (i != serv_cursor){
-						fprintf(muconf, "%s %s %d\n", serverlist[i].name, serverlist[i].ip, serverlist[i].port);
+						fprintf(muconf, "%s %s %d\n", serverlist[i].name, serverlist[i].addr, serverlist[i].port);
 						if (i < serv_cursor) new_servers[i] = serverlist[i];
 						else new_servers[i-1] = serverlist[i];
 					}
@@ -1281,6 +1285,8 @@ void serverlist_menu(){
 				serverlist = new_servers;		
 			}
 			if (dash_cursor == 1){
+
+				if(numservers <= 0) continue;	
 				
 				server_t *server = add_server(serverwin, &serverlist[serv_cursor]);
 
@@ -1291,13 +1297,13 @@ void serverlist_menu(){
 				for(int i = 0; i < numservers; i++) {
 					if (i == serv_cursor) {
 						new_servers[i].name = server->name;
-						new_servers[i].ip = server->ip;
+						new_servers[i].addr = server->addr;
 						new_servers[i].port = server->port;
-						fprintf(muconf, "\n%s %s %d", server->name, server->ip, server->port); 
+						fprintf(muconf, "\n%s %s %d", server->name, server->addr, server->port); 
 					} else {
 						new_servers[i] = serverlist[i];
 						if (i < serv_cursor) fscanf(muconf, "%*s %*s %*d");
-						else fprintf(muconf, "\n%s %s %d", serverlist[i].name, serverlist[i].ip, serverlist[i].port);
+						else fprintf(muconf, "\n%s %s %d", serverlist[i].name, serverlist[i].addr, serverlist[i].port);
 					}
 				}
 				fclose(muconf);
@@ -1311,7 +1317,7 @@ void serverlist_menu(){
 	// Free allocated memory
 	for(int i = 0; i < numservers; i++){
 		free(serverlist[i].name);
-		free(serverlist[i].ip);
+		free(serverlist[i].addr);
 	}
 	if (numservers > 0) free(serverlist);
 
@@ -1434,6 +1440,5 @@ int main(int argc, char **argv){
 	endwin();
 
 	return 0;
-
 }
 
