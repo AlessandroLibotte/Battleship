@@ -129,4 +129,4 @@ The following are the messages handled by this function:
 - MIS: Response to the fire message signaling a miss
 - DIS: Signaling the disconnection of the sender
 
-
+Upon reception of any message the corresponding action is taken by either relaying the message on the inter process messaging queue or by interacting directly with the player_map or enemy map.
