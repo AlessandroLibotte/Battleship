@@ -3,7 +3,7 @@ A TTy retro implementation of the classic game with some modern twists
 
 > This project started as a personal challenge to learn how to create terminal GUI applications using the curses.h library and then evolved into the final project for my University's Operating Systems course.
 ## Installation 
-Download or clone the repository, move into the downloaded folder and compile with ```make```. The application has no external requirement, it just needs to be run on a UNIX machine.
+Download or clone the repository, move into the downloaded folder and compile with ```make```. The application should rely only on UNIX's system and default librarys but make sure you have the curses.h library correctly installed on your machine.
 
 ## Core data structures used
 Throughout the application a number of data structures are used, either library defined or custom made. Organizing the data handled by the application this way was a decision made mainly for ease of development, general code tidiness and especially 
