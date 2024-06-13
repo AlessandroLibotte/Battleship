@@ -307,6 +307,14 @@ char *setup_enemy(){
 	return map;
 }
 
+void update_field(game_win *gamewin, bool which){
+
+	werase(which ? gamewin->enemyfield : gamewin->playerfield);
+	print_field(which ? gamewin->enemyfield : gamewin->playerfield, gamewin->win, 2, which ? 93 : 4, which ? " Enemy BattleField " : " Player Field ");
+	which ? draw_map(gamewin->enemyfield, gamewin->enemy_map, false) : draw_map(gamewin->playerfield, gamewin->player_map, true);
+	
+}
+
 void game_loop(game_win *gamewin,bool turn, bool mp, int des){
 
     	position_fleet(gamewin, mp, des);
@@ -318,7 +326,7 @@ void game_loop(game_win *gamewin,bool turn, bool mp, int des){
 		if (mp) {
 
 			write(CLIENT,"RDY", MSG_SIZE);
-			while(1){
+			while(true){
 				if (msgrcv(des, &m, MSG_SIZE, 1, IPC_NOWAIT) != -1)
 					if (strcmp(m.text, "RDY") == 0) break;
 				sleep(1);
@@ -343,11 +351,9 @@ void game_loop(game_win *gamewin,bool turn, bool mp, int des){
 				if(x < 0) x = 0;
 				if(y > 9) y = 9;
 				if(y < 0) y = 0;
+
+				update_field(gamewin, true);
 	
-				werase(gamewin->enemyfield);
-				print_field(gamewin->enemyfield, gamewin->win, 2, 93, " Enemy BattleField ");
-				draw_map(gamewin->enemyfield, gamewin->enemy_map, false);
-		
 				wattron(gamewin->enemyfield, A_BLINK);
 				mvwprintw(gamewin->enemyfield, 1+y*2, 2+x*4, "⨀");
 				wattroff(gamewin->enemyfield, A_BLINK);
@@ -359,20 +365,25 @@ void game_loop(game_win *gamewin,bool turn, bool mp, int des){
 				if (key == KEY_RIGHT) x++;
 				if (key == 10){
 					if (mp){
-						char smsg[MSG_SIZE] = {'F', '0'+y, '0'+x, '\0'};
-						m.type = 2;
-						sprintf(m.text, smsg);
-						msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
-						write(CLIENT,(char*)smsg, MSG_SIZE);
+						if (gamewin->enemy_map[cds(y,x)] != 7 && gamewin->enemy_map[cds(y,x)] != 8){
+							char smsg[MSG_SIZE] = {'F', '0'+y, '0'+x, '\0'};
+							m.type = 2;
+							sprintf(m.text, smsg);
+							msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
+							write(CLIENT,(char*)smsg, MSG_SIZE);
+							turn = false;
+						}
 					} else {
-						if(gamewin->enemy_map[cds(y,x)] != 0 && gamewin->enemy_map[cds(y,x)] != 8){
-							gamewin->enemy_map[cds(y,x)] = 7;
-						} else {
-							gamewin->enemy_map[cds(y,x)] = 8;
+						if (gamewin->enemy_map[cds(y,x)] != 7 && gamewin->enemy_map[cds(y,x)] != 8){
+							if(gamewin->enemy_map[cds(y,x)] != 0 && gamewin->enemy_map[cds(y,x)] != 8){
+								gamewin->enemy_map[cds(y,x)] = 7;
+							} else {
+								gamewin->enemy_map[cds(y,x)] = 8;
+							}
+							turn = false;
 						}
 					}
 					wrefresh(gamewin->radiolog);
-					turn = false;
 				}
 				wrefresh(gamewin->enemyfield);
 			} else {
@@ -400,9 +411,7 @@ void game_loop(game_win *gamewin,bool turn, bool mp, int des){
                         			gamewin->player_map[cds(ey,ex)] = 8;
 					}
 					turn = true;
-					werase(gamewin->playerfield);
-					print_field(gamewin->playerfield, gamewin->win, 2, 4, " Your Battlefield ");
-					draw_map(gamewin->playerfield, gamewin->player_map, true);
+					update_field(gamewin, false);
 					wrefresh(gamewin->playerfield);
 				}
 			}
@@ -468,7 +477,7 @@ void error(const char *msg){
 	refresh();
 	box(errwin, 0, 0);
 	mvwprintw(errwin, 0, 3, " !ERROR! ");
-	mvwprintw(errwin, 4, 2, "%s", msg);
+	mvwprintw(errwin, 4, 2, "%s\nERRNO:%d", msg, errno);
 	wrefresh(errwin);
 	wgetch(errwin);
 	werase(errwin);
@@ -482,38 +491,31 @@ void getparse_msg(int des, game_win* gamewin){
 	int n;
 	int line = 1;		
 	char buffer[MSG_SIZE];	
-	bool connected = true;
 	msg m;
 
-	while(connected){	
+	while(true){	
 	
 		// Read form socket
 		n = read(CLIENT, buffer, MSG_SIZE);
 		if (n < 0) {
 			error("ERROR reading from socket");
-			connected = false;
 			return;
 		}
 
 		// Print to screen log
-		if (connected){
-			int rly, rlx;
-			getyx(gamewin->radiolog, rly, rlx);
-			if (rlx > 127-n){
-				line ++;
-			       	wmove(gamewin->radiolog, line, 3);
-				wrefresh(gamewin->radiolog);
-			}
-			if (rly > 6) line = 0;
-			wprintw(gamewin->radiolog, "%s ", buffer);
+		int rly, rlx;
+		getyx(gamewin->radiolog, rly, rlx);
+		if (rlx > 127-n){
+			line ++;
+		       	wmove(gamewin->radiolog, line, 3);
 			wrefresh(gamewin->radiolog);
 		}
+		if (rly > 6) line = 0;
+		wprintw(gamewin->radiolog, "%s ", buffer);
+		wrefresh(gamewin->radiolog);
 
 		if(msgrcv(des, &m, MSG_SIZE, 4, IPC_NOWAIT) != -1)
-			if (strcmp(m.text, "DIS")) {
-				connected = false;
-				return;
-			}
+			if (strcmp(m.text, "DIS") == 0) return;
 	
 		// Parse message and act on it 
 		if (strcmp(buffer, "RDY") == 0){
@@ -529,9 +531,7 @@ void getparse_msg(int des, game_win* gamewin){
 
             		gamewin->enemy_map[cds(y, x)] = 7; // Set enemy map to hit marker
 			// Redraw enemy field
-			werase(gamewin->enemyfield);
-			print_field(gamewin->enemyfield, gamewin->win, 2, 93, " Enemy BattleField ");
-			draw_map(gamewin->enemyfield, gamewin->enemy_map, false);
+			update_field(gamewin, true);
 			wrefresh(gamewin->enemyfield);
 		}
 		if (strcmp(buffer, "MIS") == 0){
@@ -541,10 +541,8 @@ void getparse_msg(int des, game_win* gamewin){
 			int x = m.text[2]-'0';
 
             		gamewin->enemy_map[cds(y, x)] = 8; // Set enemy map to miss marker
-			// Redraw enemy field
-			werase(gamewin->enemyfield);
-			print_field(gamewin->enemyfield, gamewin->win, 2, 93, " Enemy BattleField ");
-			draw_map(gamewin->enemyfield, gamewin->enemy_map, false);
+			// Redraw enemy field	
+			update_field(gamewin, true);
 			wrefresh(gamewin->enemyfield);
 		}
 		if (buffer[0] == 'F'){ // Enemy fire message format : F[y][x] 
@@ -561,9 +559,7 @@ void getparse_msg(int des, game_win* gamewin){
 				n = write(CLIENT, "MIS", MSG_SIZE); // Send back miss message
 			}
 			// Redraw player field
-			werase(gamewin->playerfield);
-			print_field(gamewin->playerfield, gamewin->win, 2, 4, " Your Battlefield ");
-			draw_map(gamewin->playerfield, gamewin->player_map, true);
+			update_field(gamewin, false);
 			wrefresh(gamewin->playerfield);
 			// Change turn
 			m.type = 3;
@@ -572,8 +568,6 @@ void getparse_msg(int des, game_win* gamewin){
 		}
 		if (strcmp(buffer, "DIS") == 0){ // Enemy disconnected
 			
-			connected = false;
-
 			m.type = 3;
 			sprintf(m.text, "DIS");
 			msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
@@ -581,7 +575,7 @@ void getparse_msg(int des, game_win* gamewin){
 
 			return;
 		}
-
+		sleep(1);
 	}
 }
 
@@ -682,7 +676,7 @@ void *init_client(void *targ){
 		return NULL;
 	}
 	
-	// Clear and populate socket client structs
+	// Clear and populate client address structs
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
 	bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
