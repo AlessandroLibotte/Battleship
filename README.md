@@ -3,8 +3,7 @@ A TTy retro implementation of the classic game with some modern twists
 
 > This project started as a personal challenge to learn how to create terminal GUI applications using the curses.h library and then evolved into the final project for my University's Operating Systems course.
 ## Installation 
-Download or clone the repository, move into the downloaded folder and compile with ```make```. The application should rely only on UNIX's system and default librarys but make sure you have the curses.h library correctly installed on your machine.
-
+Download and extract or clone the repository, move into the downloaded folder and compile with ```make```. The application should rely only on UNIX's system and default librarys but make sure that you have the curses.h library correctly installed on your machine sicne it doesn't come with every distibution.
 ## Core data structures used
 Throughout the application a number of data structures are used, either library defined or custom made. Organizing the data handled by the application this way was a decision made mainly for ease of development, general code tidiness and especially 
 to reduce the number of different arguments passed to functions.
@@ -49,7 +48,6 @@ The ```msg``` structure is defined as is described in the msgrcv POSIX Programme
 ### Data structure used for storing 
 To implement persistance when accessing the user created multiuser server list, the corresponding data is stored on the file system and it is handled by the application trough the use of the server_t structure. This structure stores the name, ip address and port of a server. Every time the user accesses the multiuser server list, if present, the ```multiuser.conf``` file is opened and after reading the number of servers the space for the correct number of structures is allocated in a list, then the structures are populated with the servers data read from file in a looping fashion. 
 If the user decides to edit or delete a server then the list containing the servers is duplicated except for the deleted or edited server, that is either skipped or substituted, and the file is updated.
-
 ## Input 
 Troughout the application, input is handled in both a blocking and non-blocking fashion depending on the circumstances. 
 
@@ -91,10 +89,8 @@ In some cases the user is required to provide a text input alongside arrow keys,
 To manage this, two pointers are initialized outside the input loop for each input field. One pointer remains unchanged and is used to store the input, while the other serves as a cursor within the input field. By leveraging pointer arithmetic, the length of the inputted text can be dynamically calculated (string length = cursor pointer position - string pointer position). This allows the cursor to maintain its position at the end of the text, regardless of the varying lengths of input strings, when transitioning between input fields. Within the input loop, the integer value of the pressed key is examined. If the key falls within the respective ranges of alphanumeric characters required for the specific input field, such as ('a'-'z', 'A'-'Z', or '0'-'9') and the cursor doesn't exceed the maximum string length, the pressed key is printed to screen, the cursor pointer for that field is updated with the corresponding character value and then advanced to the next position. If the pressed key is backspace and the string lenght is grather than zero the cursor pointer for the current field is set to '\0' and then decremented.
 
 (For the most comprehensive implementation of this technique, refer to the 'add_server()' function)
-
 ## Game loop
 The ```game_loop()``` function is responsible for handling any kind of match such as single player, online or multiuser.
-
 ### Single player matches
 When the user starts a single player match, after the initialization of the ```game_win``` object, the ```game_loop()``` function is called with the ```mp``` boolean argument set to ```false``` signaling that the match is single player. From this point on if the ESC key is presses at any time the user will be able to quit the game and return to the main menu.
 
@@ -103,17 +99,14 @@ First of all the user will enter the positioning phase handled by the ```positio
 The game loop is basically comprised of two sections: one for the users's turn and one for the enemy's turn. The user's turn is an input loop that allows the user to move a cursor over the enemy field and fire by checking the enemy map at the current cursor position and setting it to the hit or miss marker accordingly, while the enemy's turn randomly chooses a point on the player field to fire upon then checks the player map at the cursor position and sets it to the hit or miss marker accordingly.
 
 When either one of the turns has ended the turn is respectively passed to the user or to the enemy.
-
 ### Online matches
 When the user starts an online match, after the initialization of the ```game_win``` object, the ```game_loop()``` function is called with the ```mp``` boolean argument set to ```true``` signaling that the match is online. From this point on if the ESC key is presses at any time the user will be able to quit the game and return to the main menu.
 
 First of all the user will enter the positioning phase handled by the ```position_fleet()``` function, this function enables the user to move around, rotate and place 5 ships inside of his field's borders. On completion of the user's positioning phase the message "RDY" is writtrn to the socket signaling to the enemy's application that the user's application is ready to commence the match, then it enters an infinite loop waiting for the reception of the enemy's "RDY" message on the inter process message queue.
 
 When both users are ready the actual match can start and the host is always the first to play. One at a time both users will be able to move the cursor on the enemy field and fire upon the selected position. When a user decides to fire, a string containing the user's firing coordinates is dynamically created and written to both the socket and the inter process message queue. The actual consequenses of the firing event are handled in the ```getparse_msg()``` function (refer to the **Multiplayer** paragraph). After fireing, the application will enter an infinite loop waiting for either the user to press the ESC or a message on the inter process message queue signaling that the turn has been passed back or the disconnection of the enemy.
-
 ### Multiuser matches !!!NOT IMPLEMENTED YET!!!
 The concept should remain essentially the same as the online match, with the additional feature of being able to select which enemy to fire upon via a selector field that will replace the "Enemy Field" text with "[Username]'s Field".
-
 ## Multiplayer
 Most of the multiplayer capabilities of the application are handled by four functions: ```multiplayer()```, ```init_client()```, ```init_host()``` and ```getparse_msg()```. Since hosting and connecting to a match require some quite similar routines, both actions share most of the code, with the major difference being in the ```init_client()``` and ```init_host()``` functions.
 
