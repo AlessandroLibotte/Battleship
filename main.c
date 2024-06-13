@@ -14,6 +14,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <fcntl.h>
 
 
 #define cds(y, x)((10*(y))+x)
@@ -490,7 +491,8 @@ void getparse_msg(int des, game_win* gamewin){
 		n = read(CLIENT, buffer, MSG_SIZE);
 		if (n < 0) {
 			error("ERROR reading from socket");
-			pthread_exit((void *)-1);
+			connected = false;
+			return;
 		}
 
 		// Print to screen log
@@ -626,7 +628,6 @@ void *init_host(void *targ){
 	listen(SERVER,1);
 	clilen = sizeof(cli_addr);
 	CLIENT = accept(SERVER, (struct sockaddr *) &cli_addr, &clilen);
-
 	if (CLIENT < 0){
         	error("ERROR on accept");
 		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
@@ -635,6 +636,8 @@ void *init_host(void *targ){
 	
 	close(SERVER);
 	
+	fcntl(CLIENT, F_SETFD, O_NONBLOCK);
+
 	sprintf(m.text, "CON");
 	msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
 	
@@ -679,7 +682,7 @@ void *init_client(void *targ){
 		return NULL;
 	}
 	
-	// Populate socket client structs
+	// Clear and populate socket client structs
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
 	bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
@@ -692,6 +695,8 @@ void *init_client(void *targ){
         	close(CLIENT);
 		return NULL;
 	}
+	
+	fcntl(CLIENT, F_SETFD, O_NONBLOCK);
 	
 	sprintf(m.text, "CON");
 	msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
