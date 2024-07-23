@@ -18,6 +18,7 @@
 
 
 #define cds(y, x)((10*(y))+x)
+#define mpcds(p, y, x)((100*(p))+(10*(y))+x)
 
 WINDOW *master;
 
@@ -49,10 +50,20 @@ int CLIENT, SERVER;
 
 typedef struct t_targ{
 	int des;
+	int mode;
 	game_win *gamewin;
 	char *addr;
 	int port;
+	char *username;
 } t_targ;
+
+struct msg_player{
+        int id;
+        char username[20];
+};
+
+struct msg_player *playerlist;
+int num_players;
 
 void init_curses(){
 	setlocale(LC_ALL, "");
@@ -315,62 +326,113 @@ void update_field(game_win *gamewin, bool which){
 	
 }
 
-void game_loop(game_win *gamewin,bool turn, bool mp, int des){
+void game_loop(game_win *gamewin, bool turn, int mp, int des, char *un){
 
+	// int mp: 0 signleplayer, 1 online, 2 multiuser
+
+	// Positioning phase
     	position_fleet(gamewin, mp, des);
 
 	msg m;
 	
+	// If the player hasn't quit during the positionign phase
 	if(*gamewin->player_map != 10){
 
-		if (mp) {
+		int self;
 
+		// if the game is multiplayer
+		if (mp != 0) {
+			
+			// Send RDY flag to signal end of own positiong phase
 			write(CLIENT,"RDY", MSG_SIZE);
+			// wait for RDY response flag signaling end of opponent positionign phase 
 			while(true){
 				if (msgrcv(des, &m, MSG_SIZE, 1, IPC_NOWAIT) != -1)
 					if (strcmp(m.text, "RDY") == 0) break;
 				sleep(1);
 			}
-
-            		gamewin->enemy_map = calloc(100, sizeof(char));
+			
+			if(mp == 2){
+				for(int i = 0; i < num_players; i++){
+					if(strcmp(un, playerlist[i].username) == 0) self = i;
+				}
+				wprintw(gamewin->radiolog, "self is %d ", self);
+				wrefresh(gamewin->radiolog);
+				gamewin->enemy_map = calloc((num_players) * 100, sizeof(char)); 
+			}
+			// allocate space for enemy map
+			else gamewin->enemy_map = calloc(100, sizeof(char));
+			
 			wtimeout(gamewin->enemyfield, 5);
 		}
+		// else if the game is single player generate random enemy map
 		else gamewin->enemy_map = setup_enemy();
 
 		int x = 0;
 		int y = 0;
-		int key;
+		int key;	
+
+		int sel_p = 0;
 		
 		bool connected = true;
 		
+		// allow for arrowkey input
 		keypad(gamewin->enemyfield, true);
+		// while ESC key is not pressed 
 		do{
+			// if it's own turn 
 			if (turn){
 	
 				if(x > 9) x = 9;
 				if(x < 0) x = 0;
+				
 				if(y > 9) y = 9;
 				if(y < 0) y = 0;
-
+				
+				if(sel_p == num_players) sel_p = 0;
+				if(sel_p < 0) sel_p = num_players-1;
+				if(sel_p == self){
+					if(key == 'e') sel_p++;
+					else if(key == 'q') sel_p --;
+					else sel_p++; 
+				}	
+								
+				// redraw enemy field 
 				update_field(gamewin, true);
-	
+				
+				if(mp == 2) {
+					werase(gamewin->enemyfield);
+					print_field(gamewin->enemyfield, gamewin->win, 2, 93, "" );
+					mvwprintw(gamewin->enemyfield, 0, 3, " %s's field ", playerlist[sel_p].username);
+					draw_map(gamewin->enemyfield, gamewin->enemy_map+(100*sel_p), false);
+				}
+
+				// Draw cursor
 				wattron(gamewin->enemyfield, A_BLINK);
 				mvwprintw(gamewin->enemyfield, 1+y*2, 2+x*4, "⨀");
 				wattroff(gamewin->enemyfield, A_BLINK);
-		
+				
+				// get input 
 				key = wgetch(gamewin->enemyfield);
+				// parse input
 				if (key == KEY_UP) y--;
 				if (key == KEY_DOWN) y++;
 				if (key == KEY_LEFT) x--;
 				if (key == KEY_RIGHT) x++;
-				if (key == 10){
-					if (mp){
-						if (gamewin->enemy_map[cds(y,x)] != 7 && gamewin->enemy_map[cds(y,x)] != 8){
-							char smsg[MSG_SIZE] = {'F', '0'+y, '0'+x, '\0'};
+				if (key == 'q') sel_p--;
+				if (key == 'e') sel_p++;
+				if (key == 10){ // if ENTER is pressed 
+					if (mp){ // if the game is multiplayer
+						if (gamewin->enemy_map[cds(y,x)] != 7 && gamewin->enemy_map[cds(y,x)] != 8){ // if the cursor is on an empety cell
+							char smsg[MSG_SIZE] = {'F', '0'+y, '0'+x, '\0'}; // generate coords message
 							m.type = 2;
+							if(mp == 2){
+							       	char t = '0'+sel_p;
+								write(CLIENT, &t, sizeof(char));
+							}
 							sprintf(m.text, smsg);
-							msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
-							write(CLIENT,(char*)smsg, MSG_SIZE);
+							msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT); // send on IPCMQ because it's necessary for the response 
+							write(CLIENT,(char*)smsg, MSG_SIZE); // send to the opponent
 							turn = false;
 						}
 					} else {
@@ -486,12 +548,16 @@ void error(const char *msg){
 	refresh();
 }
 
-void getparse_msg(int des, game_win* gamewin){
+void getparse_msg(int des, game_win* gamewin, int self, int mode){
 
 	int n;
 	int line = 1;		
 	char buffer[MSG_SIZE];	
 	msg m;
+
+	int target;	
+
+	int tx, ty;
 
 	while(true){	
 	
@@ -501,6 +567,10 @@ void getparse_msg(int des, game_win* gamewin){
 			error("ERROR reading from socket");
 			return;
 		}
+
+		if(sscanf(buffer, "%d", &target) != 0) continue;
+		
+		
 
 		// Print to screen log
 		int rly, rlx;
@@ -523,48 +593,79 @@ void getparse_msg(int des, game_win* gamewin){
 			sprintf(m.text, "RDY");
 			msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
 		}
-		if (strcmp(buffer, "HIT") == 0){
-
-			msgrcv(des, &m, MSG_SIZE, 2, 0);
-			int y = m.text[1]-'0';
-			int x = m.text[2]-'0';
-
-            		gamewin->enemy_map[cds(y, x)] = 7; // Set enemy map to hit marker
-			// Redraw enemy field
-			update_field(gamewin, true);
-			wrefresh(gamewin->enemyfield);
-		}
-		if (strcmp(buffer, "MIS") == 0){
-
-			msgrcv(des, &m, MSG_SIZE, 2, 0);
-			int y = m.text[1]-'0';
-			int x = m.text[2]-'0';
-
-            		gamewin->enemy_map[cds(y, x)] = 8; // Set enemy map to miss marker
-			// Redraw enemy field	
-			update_field(gamewin, true);
-			wrefresh(gamewin->enemyfield);
-		}
-		if (buffer[0] == 'F'){ // Enemy fire message format : F[y][x] 
-			// Convert coordinates to int 
-			int y = buffer[1]-'0';
-			int x = buffer[2]-'0';
-			if (gamewin->player_map[cds(y,x)] != 0 && gamewin->player_map[cds(y,x)] != 8){
-				// If there is a player ship that wasn't  hit yet
-                		gamewin->player_map[cds(y,x)] = 7; // Set player map to hit marker
-				n = write(CLIENT, "HIT", MSG_SIZE); // Send back hit message
-			} else {
-				// If there isn't a player ship
-                		gamewin->player_map[cds(y,x)] = 8; // Set player map to miss marker
-				n = write(CLIENT, "MIS", MSG_SIZE); // Send back miss message
-			}
-			// Redraw player field
-			update_field(gamewin, false);
-			wrefresh(gamewin->playerfield);
-			// Change turn
+		if(strcmp(buffer, "TUR") == 0){
 			m.type = 3;
 			sprintf(m.text, "TUR");
 			msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
+		}
+		if (strcmp(buffer, "HIT") == 0){
+
+			if (mode == 2){	
+				gamewin->enemy_map[mpcds(target, ty, tx)] = 7; // Set enemy map to hit marker
+				werase(gamewin->enemyfield);
+				print_field(gamewin->enemyfield, gamewin->win, 2, 93, "" );
+				mvwprintw(gamewin->enemyfield, 0, 3, " %s's field ", playerlist[target].username);
+				draw_map(gamewin->enemyfield, gamewin->enemy_map+(100*target), false);
+
+			}
+			else{
+				msgrcv(des, &m, MSG_SIZE, 2, 0);
+				int y = m.text[1]-'0';
+				int x = m.text[2]-'0';
+            			gamewin->enemy_map[cds(y, x)] = 7; // Set enemy map to hit marker
+				update_field(gamewin, true);
+
+			}
+			wrefresh(gamewin->enemyfield);
+		}
+		if (strcmp(buffer, "MIS") == 0){
+			if (mode == 2){	
+				gamewin->enemy_map[mpcds(target, ty, tx)] = 8; // Set enemy map to miss marker
+				werase(gamewin->enemyfield);
+				print_field(gamewin->enemyfield, gamewin->win, 2, 93, "" );
+				mvwprintw(gamewin->enemyfield, 0, 3, " %s's field ", playerlist[target].username);
+				draw_map(gamewin->enemyfield, gamewin->enemy_map+(100*target), false);
+			}
+			else{
+				msgrcv(des, &m, MSG_SIZE, 2, 0);
+				int y = m.text[1]-'0';
+				int x = m.text[2]-'0';
+            			gamewin->enemy_map[cds(y, x)] = 8; // Set enemy map to miss marker
+				update_field(gamewin, true);
+
+			}
+
+			wrefresh(gamewin->enemyfield);
+		}
+		if (buffer[0] == 'F'){ // Enemy fire message format : F[y][x] 
+			
+			if(mode == 2 && self != target){
+				ty = buffer[1]-'0';
+				tx = buffer[2]-'0';
+			}
+			else{
+				// Convert coordinates to int 
+				int y = buffer[1]-'0';
+				int x = buffer[2]-'0';
+				if (gamewin->player_map[cds(y,x)] != 0 && gamewin->player_map[cds(y,x)] != 8){
+					// If there is a player ship that wasn't  hit yet
+                			gamewin->player_map[cds(y,x)] = 7; // Set player map to hit marker
+					n = write(CLIENT, "HIT", MSG_SIZE); // Send back hit message
+				} else {
+					// If there isn't a player ship
+                			gamewin->player_map[cds(y,x)] = 8; // Set player map to miss marker
+					n = write(CLIENT, "MIS", MSG_SIZE); // Send back miss message
+				}
+				// Redraw player field
+				update_field(gamewin, false);
+				wrefresh(gamewin->playerfield);
+				// Change turn
+				if (mode != 2){
+					m.type = 3;
+					sprintf(m.text, "TUR");
+					msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
+				}
+			}
 		}
 		if (strcmp(buffer, "DIS") == 0){ // Enemy disconnected
 			
@@ -636,7 +737,7 @@ void *init_host(void *targ){
 	msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
 	
 	// Start parseing message
-	getparse_msg(des, gamewin);
+	getparse_msg(des, gamewin, 0, 0);
 
 	close(CLIENT);
 	
@@ -651,6 +752,8 @@ void *init_client(void *targ){
 
 	int des = ((t_targ *)targ)->des;
 	game_win *gamewin = ((t_targ *)targ)->gamewin;
+	int mode = ((t_targ *)targ)->mode;
+	char *username = ((t_targ *)targ)->username;
 
 	msg m;
 	m.type = 1;
@@ -689,22 +792,43 @@ void *init_client(void *targ){
         	close(CLIENT);
 		return NULL;
 	}
-	
-	fcntl(CLIENT, F_SETFD, O_NONBLOCK);
-	
+		
 	sprintf(m.text, "CON");
 	msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
 
+	int self = 0;
+
+	if(mode == 2){
+		
+		write(CLIENT, username, 20);
+
+        	read(CLIENT, &num_players, sizeof(int));
+
+        	playerlist = calloc(num_players, sizeof(struct msg_player));
+	
+        	read(CLIENT, playerlist, num_players * sizeof(struct msg_player));
+		
+		sprintf(m.text, "SRT");
+		msgsnd(des, &m, MSG_SIZE, IPC_NOWAIT);
+
+		for(int i = 0; i < num_players; i++){
+			if(strcmp(username, playerlist[i].username) == 0) self = i;
+		}
+
+
+	}
+
+	fcntl(CLIENT, F_SETFD, O_NONBLOCK);
 	// Start parseing messages
-	getparse_msg(des, gamewin);
+	getparse_msg(des, gamewin, self, mode);
 
 	close(CLIENT);
 	return NULL;	
 } 
 
-void multiplayer(bool mode, char *addr, int port){
+void multiplayer(int mode, char *addr, int port, char *username){
 	
-	/* bool mode: Flag true for client, false for host */
+	/* bool mode: Flag - 2 for multiuser, 1 for client, 0 for host */
 
 	// Set ERROR flag and create game window
     	game_win *gamewin = create_gamewin();
@@ -721,9 +845,11 @@ void multiplayer(bool mode, char *addr, int port){
 
 	t_targ *targ = calloc(1, sizeof(t_targ));
 	targ->des = des;
+	targ->mode = mode;
 	targ->gamewin = gamewin;
 	targ->addr = addr;
 	targ->port = port;
+	targ->username = username;
 
 	// Create socket thread
 	pthread_t tid;
@@ -759,15 +885,44 @@ void multiplayer(bool mode, char *addr, int port){
 		}
 		sleep(1);
 	}
+	
+	wprintw(gamewin->radiolog, mode ? "Connected to host. " : "Player connected. ");
+        wrefresh(gamewin->radiolog);
+	
+	if(mode == 2){
+		
+		bool start = false;
+
+		while(!start && !error){
+			
+			if (msgrcv(des, &m, MSG_SIZE, 1, IPC_NOWAIT) != -1){
+				if (strcmp(m.text, "SRT") == 0) start = true;
+				if (strcmp(m.text, "ERR") == 0) error = true;
+			}
+		
+			int key = wgetch(gamewin->enemyfield);
+			if (key == 27){ // if ESC is pressed, exit
+				wtimeout(gamewin->enemyfield, -1);
+				close_gamewin(gamewin);
+				if(mode) close(CLIENT);
+				else close(SERVER);
+				msgctl(des, IPC_RMID, NULL);
+				pthread_cancel(tid);
+				return;
+			}
+			sleep(1);
+		}
+	}
+	
     	wtimeout(gamewin->enemyfield, -1);
 	
 	// Connection successful
 	if (!error) {
-        	wprintw(gamewin->radiolog, mode ? "Connected to host. " : "Player connected. ");
-        	wrefresh(gamewin->radiolog);
+        	
 		// Start game
-        	if(mode) game_loop(gamewin, false, true, des);
-		else game_loop(gamewin, true, true, des);
+		if(mode == 2) game_loop(gamewin, false, 2, des, username);
+		else if(mode == 1) game_loop(gamewin, false, 1, des, NULL);
+		else game_loop(gamewin, true, 1, des, NULL);
     	}
 	
 	pthread_cancel(tid);
@@ -840,7 +995,7 @@ void mph_menu(WINDOW *win){
 		} else if (key == 10){ // Enter
 			curs_set(0);
             		werase(win);
-			multiplayer(false, NULL, atoi(p));
+			multiplayer(0, NULL, atoi(p), NULL);
 			break;
 		} else if (key >= '0' && key <= '9' && c-p < 6) { // Handle digits
 			wprintw(win, "%c", (char)key);
@@ -900,7 +1055,7 @@ void mpc_menu(WINDOW *win){
 		} else if (key == 10){ // Enter
 			curs_set(0);
            		werase(win);
-			multiplayer(true, a, atoi(p));
+			multiplayer(1, a, atoi(p), NULL);
 			break;
 		} else if ((key >= '0' && key <= '9') || key == '.'){ // Handle digits and periods
 			if(field && c-p < 6){
@@ -1169,6 +1324,12 @@ server_t *get_servers(FILE* conf, int ns){
 	return sl;
 }
 
+void connect_multiuser(){
+
+
+	
+}
+
 void serverlist_menu(){
 	
 	
@@ -1239,7 +1400,7 @@ void serverlist_menu(){
 		if (key == KEY_LEFT) dash_cursor--;
 
 		if (key == 10){
-			if(dash_cursor == 3){
+			if(dash_cursor == 3){ // Add new server
 				server_t *server = add_server(serverwin, (server_t *)NULL);
 				if (server != NULL){
 
@@ -1265,7 +1426,7 @@ void serverlist_menu(){
 					
 				}
 			}
-			if (dash_cursor == 2){
+			if (dash_cursor == 2){ // Delete server
 				
 				if (numservers <= 0) continue;
 				
@@ -1283,7 +1444,7 @@ void serverlist_menu(){
 				free(serverlist);
 				serverlist = new_servers;		
 			}
-			if (dash_cursor == 1){
+			if (dash_cursor == 1){ // Edit server
 
 				if(numservers <= 0) continue;	
 				
@@ -1308,6 +1469,16 @@ void serverlist_menu(){
 				fclose(muconf);
 				free(serverlist);
 				serverlist = new_servers;
+			}
+			if (dash_cursor == 0){ // Connect to server
+				
+				werase(serverwin);
+				//box(serverwin, 0, 0);
+				//mvwprintw(serverwin, 0, 3, " %s's waiting room ", serverlist[serv_cursor].name);
+
+				multiplayer(2, serverlist[serv_cursor].addr, serverlist[serv_cursor].port, username);
+
+				//wgetch(serverwin);
 			}
 		}
 
@@ -1361,7 +1532,7 @@ void main_menu(){
 				game_win *gamewin = create_gamewin();
 				wmove(gamewin->radiolog, 1, 3);
 				wrefresh(gamewin->radiolog);
-				game_loop(gamewin, true, false, -1);
+				game_loop(gamewin, true, 0, -1, NULL);
 				close_gamewin(gamewin);
 				break;
 			case 1: // 1v1 Classic host submenu
