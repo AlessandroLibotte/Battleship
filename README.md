@@ -140,3 +140,10 @@ Upon reception of any message, the corresponding action is either taken by relay
 
 ## Multiuser matches
 
+On a technical level multiuser matches differ from online matches on just and handfull of functionalities. The main difference obviously lies in the hosting method, infact a multiuser match can not be hosted directly within the game, as an online match can, the server_main.c file must be run instead to host such server.
+
+The multiuser server, once run, allocates in a list the space for the number of players specified in the MAX_PLAYERS costant and sets up a socket server, then calls the waitingroom() function to wait for the connection of the specified number of players. On evry connection the playerlist is pupulated and a log message is printed to the screen.
+
+When the maximum player number is reached the server broadcasts to every player the maximum number of players first, and then the actual playerlist. On the reciveing end this data is recieved and stored during the execution of the multiplayer() function. After that the potion phase commences for every player so the multiuser server calls the corresponding function that waits for the reception of the RDY message from all the player signaling that they all have finished the positioning phase. Only after the reception from all players the server will broadcast the response RDY message to all the players letting the actual game start.
+
+After that, the server merely serves as a broadcasting application, relaying a player's message to all the other players since the already implemented functions that handle multiplayer capabilities just need to accomodate for the handling of more than one enemy, without drastically changeing the structure of the code or adding adhoc function to handle it. These accomodations can be found in the game_loop() function and in the getparse_msg() function where if the gamemode is multiuser the application must recieve and transmit, before every message, the target player towards who the message is directed, to be able to react correctly and update the correct enemy or self map.
