@@ -49,7 +49,7 @@ The t_targ structure includes the following elements:
 
 The msg structure is defined as described in the ```msgrcv``` page of the POSIX Programmer's Manual.
 
-### Socket Commnication data structures
+### Socket Communication data structures
 
 When the user connects to a multiuser server the application needs to know how many players are connected and their username to enable the user to attack the one he wishes, this is achieved throug the use of the msg_player() structure, containing the player's id and username. A list of said structures containing the players data is broadcasted by the server to every player that then stores it for future reference.
 
@@ -94,13 +94,13 @@ do{
 
 In some cases the user is required to  provide a text input alongside arrow keys, enter and esc presses (e.g.  when entering a username, ip address or  port number).
 
-To manage this, two pointers are initialized outside the  input loop for each input field. One pointer remains unchanged and is  used to store the input, while the other serves as a cursor within the  input field. By leveraging pointer arithmetic, the length of the  inputted text can be dynamically calculated (string length = cursor  pointer position - string pointer position). This allows the cursor to  maintain its position at the end of the text, regardless of the varying  lengths of input strings, when transitioning between input fields.  Within the input loop, the integer value of the pressed key is examined. If the key falls within the respective ranges of alphanumeric  characters required for the specific input field, such as ('a'-'z',  'A'-'Z', '0'-'9' or '.') and the cursor doesn't exceed the maximum  string length, the pressed key is printed to screen, the cursor pointer  for that field is updated with the corresponding character value and  then advanced to the next position. If the pressed key is backspace and  the string length is greater than zero the cursor pointer for the  current field is set to '\0' and then decremented. (For the most comprehensive implementation of this technique, refer to the 'add_server()' function)
+To manage this, two pointers are initialized outside the  input loop for each input field. One pointer remains unchanged and is  used to store the input, while the other serves as a cursor within the  input field. By leveraging pointer arithmetic, the length of the  inputted text can be dynamically calculated (string length = cursor  pointer position - string pointer position). This allows the cursor to  maintain its position at the end of the text, regardless of the varying  lengths of input strings, when transitioning between input fields.  Within the input loop, the integer value of the pressed key is examined. If the key falls within the respective ranges of alphanumeric  characters required for the specific input field, such as 'a'-'z',  'A'-'Z', '0'-'9' or '.' and the cursor doesn't exceed the maximum  string length, the pressed key is printed to screen, the cursor pointer  for that field is updated with the corresponding character value and  then advanced to the next position. If the pressed key is backspace and  the string length is greater than zero the cursor pointer for the  current field is set to '\0' and then decremented. (For the most comprehensive implementation of this technique, refer to the 'add_server()' function)
 
 ## Game loop
 The game_loop() function is responsible for handling the gameplay of any kind of match such as single player, online or multiuser.
 
 ### Single player matches
-When the user starts a single player match, after the initialization of the game_win object, the game_loop() function is called with the mp boolean argument set to false signaling that the match is single player. From this point on if the  ESC key is presses at any time the user will be able to quit the game  and return to the main menu.
+When the user starts a single player match, after the initialization of the game_win object, the game_loop() function is called with the mp argument set to false signaling that the match is single player. From this point on if the  ESC key is presses at any time the user will be able to quit the game  and return to the main menu.
 
 First of all the user will enter the positioning phase handled by the position_fleet() function. This function enables the user to move around, rotate and  place 5 ships inside his field's borders. On completion of the user's positioning phase, the enemy's ships are randomly rotated and placed  inside the enemy field and the actual match can start.
 
